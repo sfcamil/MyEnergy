@@ -682,11 +682,124 @@ class VtestSession(object):
         return all_results.get(contract_type.code, {})
 
 
+CWAPE_API_URL = "https://api.compacwape.be"
+CWAPE_SITE_URL = "https://www.compacwape.be/"
+CWAPE_CACHE_SECONDS = 600
+# CWaPE counter type ids (see https://api.compacwape.be/counter_types)
+CWAPE_COUNTER_SINGLE = 1
+CWAPE_COUNTER_DUAL_DAY, CWAPE_COUNTER_DUAL_NIGHT = 3, 4
+CWAPE_COUNTER_SINGLE_EXCL_DAY, CWAPE_COUNTER_SINGLE_EXCL_NIGHT = 6, 7
+CWAPE_COUNTER_DUAL_EXCL_DAY, CWAPE_COUNTER_DUAL_EXCL_NIGHT, CWAPE_COUNTER_DUAL_EXCL_EXCL = 9, 10, 11
+CWAPE_EXCLUDED_PROVIDERS = ("tarif social",)
+
+
+def _cwape_counter_consumptions(parsed):
+    day = parsed["day_electricity_consumption"]
+    night = parsed["night_electricity_consumption"]
+    excl = parsed["excl_night_electricity_consumption"]
+    if night and excl:
+        return [
+            {"counterType": CWAPE_COUNTER_DUAL_EXCL_DAY, "consumption": day},
+            {"counterType": CWAPE_COUNTER_DUAL_EXCL_NIGHT, "consumption": night},
+            {"counterType": CWAPE_COUNTER_DUAL_EXCL_EXCL, "consumption": excl},
+        ]
+    if night:
+        return [
+            {"counterType": CWAPE_COUNTER_DUAL_DAY, "consumption": day},
+            {"counterType": CWAPE_COUNTER_DUAL_NIGHT, "consumption": night},
+        ]
+    if excl:
+        return [
+            {"counterType": CWAPE_COUNTER_SINGLE_EXCL_DAY, "consumption": day},
+            {"counterType": CWAPE_COUNTER_SINGLE_EXCL_NIGHT, "consumption": excl},
+        ]
+    return [{"counterType": CWAPE_COUNTER_SINGLE, "consumption": day}]
+
+
+def _cwape_item_total(product, item):
+    """Same rules as the CWaPE web app (addItemToOfferSimulationProduct)."""
+    invoice_item = item.get("invoiceItem") or {}
+    if product.get("isAllInProduct") and invoice_item.get("isExcludedFromAllIn"):
+        return 0.0
+    if not product.get("isAllInProduct") and invoice_item.get("isOnlyForAllIn"):
+        return 0.0
+    price = item.get("price")
+    if isinstance(price, list):
+        total = sum(_to_float(p.get("price"), 0.0) for p in price)
+    else:
+        total = _to_float(price, 0.0)
+    for sub_item in item.get("prosumerInvoiceItems") or []:
+        total += _cwape_item_total(product, sub_item)
+    return total
+
+
+def _parse_cwape_results(power_data, contract_type, section_name):
+    """Pick the cheapest CWaPE offer for the requested contract type (fixed or variable)."""
+    if not power_data:
+        return {}
+
+    wanted_billing_base = "fixed" if contract_type == ContractType.FIXED else "variable"
+    products = {}
+    for item in power_data.get("providerProduct") or []:
+        product = item.get("providerProduct") or {}
+        product_id = product.get("id")
+        if product_id is None:
+            continue
+        entry = products.setdefault(
+            product_id,
+            {"product": product, "provider": (item.get("provider") or {}).get("name", ""), "energy": 0.0},
+        )
+        entry["energy"] += _cwape_item_total(product, item)
+
+    best = None
+    for entry in products.values():
+        product = entry["product"]
+        if product.get("billingBase") != wanted_billing_base:
+            continue
+        if entry["provider"].strip().lower() in CWAPE_EXCLUDED_PROVIDERS:
+            continue
+        network = sum(
+            _cwape_item_total(product, item)
+            for item in (power_data.get("common") or []) + (power_data.get("dnm") or [])
+        )
+        entry["network"] = network
+        entry["total"] = entry["energy"] + network
+        if entry["total"] > 0 and (best is None or entry["total"] < best["total"]):
+            best = entry
+
+    if best is None:
+        return {}
+
+    yearly_consumption = int(_to_float(power_data.get("totalConsumption"), 0.0))
+    annual_total = best["total"]
+    json_data = {
+        "name": best["product"].get("name", ""),
+        "url": best["product"].get("sheetPageUrl") or CWAPE_SITE_URL,
+        "provider": best["provider"],
+        "Maandelijkse kostprijs": [f"€ {annual_total / 12:.2f}/maand"],
+        headings[0]: f"€ {best['energy']:.2f}/jaar",
+        headings[1]: f"€ {best['network']:.2f}/jaar",
+    }
+    if yearly_consumption > 0:
+        cents_per_kwh = f"{annual_total / yearly_consumption * 100:.2f}".replace(".", ",")
+        json_data["Jaarlijkse kostprijs"] = [
+            f"{cents_per_kwh} c€/kWh",
+            f"{yearly_consumption} kWh/jaar",
+            f"€ {annual_total:.2f}/jaar",
+        ]
+    else:
+        json_data["Jaarlijkse kostprijs"] = [f"€ {annual_total:.2f}/jaar"]
+
+    return {section_name: [json_data]}
+
+
 class ComponentSession(object):
     def __init__(self):
         self.s = requests.Session()
         self.s.headers["User-Agent"] = "Python/3"
         self.s.headers["Accept-Language"] = "en-US,en;q=0.9"
+        self._cwape_cache = None
+        self._cwape_providers = None
 
     def _mijnenergie_get(self, url, timeout=30):
         """Fetch MijnEnergie page and retry once after DPG privacy gate redirect."""
@@ -714,8 +827,109 @@ class ComponentSession(object):
 
         return self.s.get(url, timeout=timeout, allow_redirects=True)
 
+    def _cwape_lookup(self, path):
+        response = self.s.get(f"{CWAPE_API_URL}{path}", headers={"Accept": "application/json"}, timeout=30)
+        response.raise_for_status()
+        return response.json() or []
+
+    def _cwape_provider_id(self, provider_name):
+        if not provider_name or provider_name in ("No provider", "Other", "Social rate"):
+            return None
+        if self._cwape_providers is None:
+            self._cwape_providers = {
+                (p.get("name") or "").strip().lower(): p.get("id") for p in self._cwape_lookup("/providers")
+            }
+        return self._cwape_providers.get(provider_name.strip().lower())
+
+    def _cwape_get_data(self, parsed, contract_type: ContractType):
+        """Fetch offers from the CWaPE (Wallonia regulator) comparator.
+
+        Returns None when the postal code is not in Wallonia or the API is unreachable,
+        so the caller can fall back to the MijnEnergie sources.
+        """
+        postalcode = parsed["postalcode"]
+        cache_key = (
+            postalcode,
+            parsed["day_electricity_consumption"],
+            parsed["night_electricity_consumption"],
+            parsed["excl_night_electricity_consumption"],
+            parsed["gas_consumption"],
+            parsed["electricity_digital_counter"],
+            parsed["electricity_provider"],
+            parsed["gas_provider"],
+        )
+        cached = self._cwape_cache
+        if cached and cached[0] == cache_key and (datetime.now() - cached[1]).total_seconds() < CWAPE_CACHE_SECONDS:
+            simulation = cached[2]
+        else:
+            try:
+                localities = self._cwape_lookup(f"/postal_codes?code={urllib.parse.quote(postalcode)}")
+                locality = next((l for l in localities if str(l.get("code")) == postalcode), None)
+                if locality is None:
+                    _LOGGER.debug("CWaPE: postal code %s not in Wallonia, skipping", postalcode)
+                    return None
+
+                if parsed["solar_panels"]:
+                    _LOGGER.warning("CWaPE: solar panels / injection are not taken into account yet")
+
+                payload = {
+                    "gasProvider": self._cwape_provider_id(parsed["gas_provider"]),
+                    "electricityProvider": self._cwape_provider_id(parsed["electricity_provider"]),
+                    "isElectricitySimulation": parsed["electricity_comp"],
+                    "isGasSimulation": parsed["gas_comp"],
+                    "consumerType": "resident",
+                    "isProsumer": False,
+                    "postalCode": locality.get("id"),
+                    "isGasConsumptionUnknown": False,
+                    "gasConsumption": parsed["gas_consumption"] if parsed["gas_comp"] else None,
+                    "gasTypicalProfile": None,
+                    "isElectricityConsumptionUnknown": False,
+                    "electricityTypicalProfile": None,
+                    "electricityConsumptionsPerCounterType": _cwape_counter_consumptions(parsed) if parsed["electricity_comp"] else [],
+                    "prosumerConsumptionsPerCounterType": [],
+                    "electricityConnectionPowerSegment": 3,  # default 6.1-9.6 kVA
+                    "gasConnectionPowerSegment": 9 if parsed["gas_comp"] else None,  # default gas segment
+                    "prosumerNetPower": None,
+                    "computeNetForProsumer": True,
+                    "hasElectricitySmartCounter": parsed["electricity_digital_counter"],
+                    "isInjectionSeparated": False,
+                    "hasCompensation": False,
+                    "prosumerUnknownConsumptionNetPower": 3,
+                    "prosumerUnknownConsumptionProductivity": 800,
+                    "prosumerUnknownConsumptionAutoConsumption": 50,
+                    "installationCertification": "before2024",
+                    "clientFile": None,
+                    "clientHeaderFile": None,
+                    "nightOnly": False,
+                    "isTariffImpact": False,
+                }
+                response = self.s.post(
+                    f"{CWAPE_API_URL}/offer_simulations",
+                    json=payload,
+                    headers={"Accept": "application/json", "Origin": "https://app.compacwape.be"},
+                    timeout=60,
+                )
+                response.raise_for_status()
+                simulation = response.json() or {}
+            except (requests.RequestException, ValueError) as err:
+                _LOGGER.warning("CWaPE comparator call failed, falling back to MijnEnergie. error=%s", err)
+                return None
+            self._cwape_cache = (cache_key, datetime.now(), simulation)
+
+        result = {}
+        if parsed["electricity_comp"]:
+            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL))
+        if parsed["gas_comp"]:
+            result.update(_parse_cwape_results(simulation.get("gas"), contract_type, FuelType.GAS.fullnameNL))
+        return result
+
     def get_data(self, config, contract_type: ContractType):
         parsed = normalize_input_config(config)
+
+        cwape_result = self._cwape_get_data(parsed, contract_type)
+        if cwape_result is not None:
+            return cwape_result
+
         postalcode = parsed["postalcode"]
         electricity_digital_counter_n = 1 if parsed["electricity_digital_counter"] else 0
         day_electricity_consumption = parsed["day_electricity_consumption"]
