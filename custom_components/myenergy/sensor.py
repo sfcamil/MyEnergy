@@ -270,6 +270,9 @@ class ComponentSensor(Entity):
         self._energycost = None
         self._netrate = None
         self._promo = None
+        self._offers = None
+        self._current_provider_offer = None
+        self._savings_per_year = None
         self._name = f"{NAME} {self._postalcode}"
         self._add_details = data._add_details
         self._input_profile = data._parsed_inputs
@@ -302,6 +305,9 @@ class ComponentSensor(Entity):
             self._energycost = None
             self._netrate = None
             self._promo = None
+            self._offers = None
+            self._current_provider_offer = None
+            self._savings_per_year = None
             self._fueltype_detail = None
             self._providerdetails = None
             return
@@ -318,6 +324,9 @@ class ComponentSensor(Entity):
                 self._energycost = self._providerdetails.get(headings[0],"")
                 self._netrate = self._providerdetails.get(headings[1],"")
                 self._promo = self._providerdetails.get(headings[2],"")
+                self._offers = self._providerdetails.get("offers")
+                self._current_provider_offer = self._providerdetails.get("current_provider_offer")
+                self._savings_per_year = self._providerdetails.get("savings_per_year")
                 price_info = self._providerdetails.get('Jaarlijkse kostprijs',[])
                 if len(price_info) > 0:
                     raw_price = price_info[0]
@@ -376,6 +385,9 @@ class ComponentSensor(Entity):
             "promo": self._promo,
             "total price per year": self._priceyear,
             "total kWh per year": self._kWhyear,
+            "offers": self._offers,
+            "current provider offer": self._current_provider_offer,
+            "savings per year": self._savings_per_year,
             "input profile": self._input_profile,
             "fulldetail": self._fueltype_detail if self._add_details else "details disabled in config"
         }

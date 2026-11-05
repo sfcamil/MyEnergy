@@ -691,6 +691,7 @@ CWAPE_COUNTER_DUAL_DAY, CWAPE_COUNTER_DUAL_NIGHT = 3, 4
 CWAPE_COUNTER_SINGLE_EXCL_DAY, CWAPE_COUNTER_SINGLE_EXCL_NIGHT = 6, 7
 CWAPE_COUNTER_DUAL_EXCL_DAY, CWAPE_COUNTER_DUAL_EXCL_NIGHT, CWAPE_COUNTER_DUAL_EXCL_EXCL = 9, 10, 11
 CWAPE_EXCLUDED_PROVIDERS = ("tarif social",)
+CWAPE_TOP_OFFERS = 10
 
 
 def _cwape_counter_consumptions(parsed):
@@ -733,7 +734,17 @@ def _cwape_item_total(product, item):
     return total
 
 
-def _parse_cwape_results(power_data, contract_type, section_name):
+def _cwape_offer_summary(entry, yearly_consumption):
+    return {
+        "provider": entry["provider"],
+        "product": entry["product"].get("name", ""),
+        "price_kwh": round(entry["total"] / yearly_consumption, 4) if yearly_consumption > 0 else None,
+        "price_year": round(entry["total"], 2),
+        "url": entry["product"].get("sheetPageUrl") or CWAPE_SITE_URL,
+    }
+
+
+def _parse_cwape_results(power_data, contract_type, section_name, current_provider=None):
     """Pick the cheapest CWaPE offer for the requested contract type (fixed or variable)."""
     if not power_data:
         return {}
@@ -751,7 +762,7 @@ def _parse_cwape_results(power_data, contract_type, section_name):
         )
         entry["energy"] += _cwape_item_total(product, item)
 
-    best = None
+    candidates = []
     for entry in products.values():
         product = entry["product"]
         if product.get("billingBase") != wanted_billing_base:
@@ -764,12 +775,14 @@ def _parse_cwape_results(power_data, contract_type, section_name):
         )
         entry["network"] = network
         entry["total"] = entry["energy"] + network
-        if entry["total"] > 0 and (best is None or entry["total"] < best["total"]):
-            best = entry
+        if entry["total"] > 0:
+            candidates.append(entry)
 
-    if best is None:
+    if not candidates:
         return {}
 
+    candidates.sort(key=lambda e: e["total"])
+    best = candidates[0]
     yearly_consumption = int(_to_float(power_data.get("totalConsumption"), 0.0))
     annual_total = best["total"]
     json_data = {
@@ -779,7 +792,13 @@ def _parse_cwape_results(power_data, contract_type, section_name):
         "Maandelijkse kostprijs": [f"€ {annual_total / 12:.2f}/maand"],
         headings[0]: f"€ {best['energy']:.2f}/jaar",
         headings[1]: f"€ {best['network']:.2f}/jaar",
+        "offers": [_cwape_offer_summary(e, yearly_consumption) for e in candidates[:CWAPE_TOP_OFFERS]],
     }
+    if current_provider:
+        own = next((e for e in candidates if e["provider"].strip().lower() == current_provider.strip().lower()), None)
+        if own is not None:
+            json_data["current_provider_offer"] = _cwape_offer_summary(own, yearly_consumption)
+            json_data["savings_per_year"] = round(own["total"] - best["total"], 2)
     if yearly_consumption > 0:
         cents_per_kwh = f"{annual_total / yearly_consumption * 100:.2f}".replace(".", ",")
         json_data["Jaarlijkse kostprijs"] = [
@@ -918,9 +937,9 @@ class ComponentSession(object):
 
         result = {}
         if parsed["electricity_comp"]:
-            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL))
+            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL, parsed["electricity_provider"]))
         if parsed["gas_comp"]:
-            result.update(_parse_cwape_results(simulation.get("gas"), contract_type, FuelType.GAS.fullnameNL))
+            result.update(_parse_cwape_results(simulation.get("gas"), contract_type, FuelType.GAS.fullnameNL, parsed["gas_provider"]))
         return result
 
     def get_data(self, config, contract_type: ContractType):
