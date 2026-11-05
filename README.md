@@ -9,6 +9,10 @@
 https://github.com/myTselection/MyEnergy/tree/master
 
 # My Energy - MijnEnergie.be Home Assistant integration
+
+## Fork note (sfcamil)
+The original repository (myTselection/MyEnergy) has been deleted and MijnEnergie.be no longer serves results to this integration. Since v4.1.0, postal codes in **Wallonia** are priced through the official CWaPE comparator API (`api.compacwape.be`, same offers as https://www.compacwape.be/). The `Fixed` / `Variable` sensors show the cheapest fixed / variable offer (social tariff and dynamic contracts excluded), all-in yearly cost including network costs and VAT. Solar panel injection is not taken into account yet for CWaPE. Other regions still use the original (currently broken) MijnEnergie path or the optional VTest (Flanders) sensors.
+
 [Mijn Energie](https://www.mijnenergie.be/) Home Assistant custom component integration for Belgium. This custom component has been built from the ground up to bring MijnEnergie.be site data into Home Assistant sensors in order to follow up the cheapest energy electricty and gas prices. This integration is built against the public website provided by MijnEnergie.be for Belgium and has not been tested for any other countries.
 
 This integration is in no way affiliated with MijnEnergie. 
