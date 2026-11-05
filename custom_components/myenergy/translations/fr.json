@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MyEnergy",
+        "description": "Comparaison des offres d'électricité et de gaz en Wallonie avec le comparateur officiel de la CWaPE. Les consommations et vos prix se trouvent sur votre décompte annuel.",
+        "data": {
+          "postalcode": "Code postal (Wallonie)",
+          "electricity_provider": "Fournisseur d'électricité actuel",
+          "current_product": "Nom de votre produit actuel (facultatif, ex. EASY)",
+          "electricity_digital_counter": "Compteur électrique intelligent (numérique)",
+          "day_electricity_consumption": "Consommation annuelle jour / heures pleines (kWh) — compteur simple : toute la consommation",
+          "night_electricity_consumption": "Consommation annuelle nuit / heures creuses (kWh) — 0 si compteur simple",
+          "excl_night_electricity_consumption": "Consommation annuelle exclusif nuit (kWh) — 0 si pas de compteur exclusif nuit",
+          "own_price_day": "Votre contrat : prix jour / heures pleines (€/kWh hors TVA, comme sur le décompte annuel ; 0 = inconnu)",
+          "own_price_night": "Votre contrat : prix nuit / heures creuses (€/kWh hors TVA)",
+          "own_price_excl_night": "Votre contrat : prix exclusif nuit (€/kWh hors TVA)",
+          "own_fixed_fee": "Votre contrat : redevance fixe (€/an hors TVA)",
+          "own_green_cost": "Votre contrat : coût énergie verte (€/kWh hors TVA)",
+          "gas_provider": "Fournisseur de gaz actuel",
+          "gas_consumption": "Consommation annuelle de gaz (kWh) — 0 si pas de gaz"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MyEnergy",
+        "description": "Modifier la configuration de MyEnergy.",
+        "data": {
+          "postalcode": "Code postal (Wallonie)",
+          "electricity_provider": "Fournisseur d'électricité actuel",
+          "current_product": "Nom de votre produit actuel (facultatif, ex. EASY)",
+          "electricity_digital_counter": "Compteur électrique intelligent (numérique)",
+          "day_electricity_consumption": "Consommation annuelle jour / heures pleines (kWh) — compteur simple : toute la consommation",
+          "night_electricity_consumption": "Consommation annuelle nuit / heures creuses (kWh) — 0 si compteur simple",
+          "excl_night_electricity_consumption": "Consommation annuelle exclusif nuit (kWh) — 0 si pas de compteur exclusif nuit",
+          "own_price_day": "Votre contrat : prix jour / heures pleines (€/kWh hors TVA, comme sur le décompte annuel ; 0 = inconnu)",
+          "own_price_night": "Votre contrat : prix nuit / heures creuses (€/kWh hors TVA)",
+          "own_price_excl_night": "Votre contrat : prix exclusif nuit (€/kWh hors TVA)",
+          "own_fixed_fee": "Votre contrat : redevance fixe (€/an hors TVA)",
+          "own_green_cost": "Votre contrat : coût énergie verte (€/kWh hors TVA)",
+          "gas_provider": "Fournisseur de gaz actuel",
+          "gas_consumption": "Consommation annuelle de gaz (kWh) — 0 si pas de gaz"
+        }
+      }
+    }
+  }
+}

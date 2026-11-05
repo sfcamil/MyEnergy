@@ -1,5 +1,8 @@
 {
-  "name": "MyEnergy",
+  "name": "MyEnergy (Wallonie)",
   "render_readme": true,
-  "country": ["BE"]
+  "country": [
+    "BE"
+  ],
+  "homeassistant": "2024.7.0"
 }

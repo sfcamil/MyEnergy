@@ -1,246 +1,82 @@
-"""Adds config flow for component."""
+"""Formulaires de configuration de l'intégration."""
 import logging
 from collections import OrderedDict
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.helpers.selector import selector
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.const import (
-    CONF_NAME,
-    CONF_PASSWORD,
-    CONF_RESOURCES,
-    CONF_SCAN_INTERVAL,
-    CONF_USERNAME
-)
+from homeassistant.helpers.selector import selector
 
 from . import DOMAIN, NAME
-from .utils import *
+from .utils import AUCUN_FOURNISSEUR, FOURNISSEURS
 
 _LOGGER = logging.getLogger(DOMAIN)
 
+# (clé, valeur par défaut, type)
+CHAMPS = [
+    ("postalcode", "", str),
+    ("electricity_provider", AUCUN_FOURNISSEUR, "fournisseur"),
+    ("current_product", "", str),
+    ("electricity_digital_counter", False, bool),
+    ("day_electricity_consumption", 0, int),
+    ("night_electricity_consumption", 0, int),
+    ("excl_night_electricity_consumption", 0, int),
+    ("own_price_day", 0.0, float),
+    ("own_price_night", 0.0, float),
+    ("own_price_excl_night", 0.0, float),
+    ("own_fixed_fee", 0.0, float),
+    ("own_green_cost", 0.0, float),
+    ("gas_provider", AUCUN_FOURNISSEUR, "fournisseur"),
+    ("gas_consumption", 0, int),
+]
+OBLIGATOIRES = ("postalcode", "electricity_provider", "electricity_digital_counter", "gas_provider")
 
 
-provider_names = list(providers.keys())
+def _ancienne_valeur_fournisseur(valeur):
+    return AUCUN_FOURNISSEUR if valeur in (None, "", "No provider") else valeur
 
-def create_schema(entry, option=False):
-    """Create a default schema based on if a option or if settings
-    is already filled out.
-    """
-    if option:
-        # We use .get here incase some of the texts gets changed.
-        default_postalcode = entry.data.get("postalcode", "")
-        default_electricity_digital_counter = entry.data.get("electricity_digital_counter", False)
-        default_day_electricity_consumption = entry.data.get("day_electricity_consumption", 0)
-        default_night_electricity_consumption = entry.data.get("night_electricity_consumption", 0)
-        default_excl_night_electricity_consumption = entry.data.get("excl_night_electricity_consumption", 0)
-        default_solar_panels = entry.data.get("solar_panels", False)
-        default_inverter_power = entry.data.get("inverter_power", 0)
-        default_electricity_injection = entry.data.get("electricity_injection", 0)
-        default_electricity_injection_night = entry.data.get("electricity_injection_night", 0)
-        default_gas_consumption = entry.data.get("gas_consumption", "")
-        default_directdebit_invoice = entry.data.get("directdebit_invoice", False)
-        default_email_invoice = entry.data.get("email_invoice", False)
-        default_online_support = entry.data.get("online_support", False)
-        default_electric_car = entry.data.get("electric_car", False)
-        default_combine_elec_and_gas = entry.data.get("combine_elec_and_gas", False)
-        default_electricity_provider = entry.data.get("electricity_provider", "No provider")
-        default_gas_provider = entry.data.get("gas_provider", "No provider")
-        default_current_product = entry.data.get("current_product", "")
-        default_own_price_day = entry.data.get("own_price_day", 0.0)
-        default_own_price_night = entry.data.get("own_price_night", 0.0)
-        default_own_price_excl_night = entry.data.get("own_price_excl_night", 0.0)
-        default_own_fixed_fee = entry.data.get("own_fixed_fee", 0.0)
-        default_own_green_cost = entry.data.get("own_green_cost", 0.0)
-        default_add_details = entry.data.get("add_details", False)
-        default_vtest_enabled = entry.data.get("vtest_enabled", False)
-    else:
-        default_postalcode = ""
-        default_electricity_digital_counter = False
-        default_day_electricity_consumption = 0
-        default_night_electricity_consumption = 0
-        default_excl_night_electricity_consumption = 0
-        default_solar_panels = False
-        default_inverter_power = 0
-        default_electricity_injection = 0
-        default_electricity_injection_night = 0
-        default_gas_consumption = 0
-        default_directdebit_invoice = True
-        default_email_invoice = True
-        default_online_support = True
-        default_electric_car = False
-        default_combine_elec_and_gas = False
-        default_electricity_provider = "No provider"
-        default_gas_provider = "No provider"
-        default_current_product = ""
-        default_own_price_day = 0.0
-        default_own_price_night = 0.0
-        default_own_price_excl_night = 0.0
-        default_own_fixed_fee = 0.0
-        default_own_green_cost = 0.0
-        default_add_details = False
-        default_vtest_enabled = False
 
-    # _LOGGER.debug(f'provider_names: {provider_names}')
-    data_schema = OrderedDict()
-    data_schema[
-        vol.Required("postalcode", default=default_postalcode, description="postalcode")
-    ] = str
-    data_schema[
-        vol.Required("electricity_provider", default=default_electricity_provider, description="electricity_provider")
-    ] = selector({
-                "select": {
-                    "options": provider_names,
-                    "mode": "dropdown"
-                }
-            })
-    data_schema[
-        vol.Optional("current_product", default=default_current_product, description="current_product")
-    ] = str
-    data_schema[
-        vol.Optional("own_price_day", default=default_own_price_day, description="own_price_day")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Optional("own_price_night", default=default_own_price_night, description="own_price_night")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Optional("own_price_excl_night", default=default_own_price_excl_night, description="own_price_excl_night")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Optional("own_fixed_fee", default=default_own_fixed_fee, description="own_fixed_fee")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Optional("own_green_cost", default=default_own_green_cost, description="own_green_cost")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Required("electricity_digital_counter", default=default_electricity_digital_counter, description="electricity_digital_counter")
-    ] = bool
-    data_schema[
-        vol.Required("electric_car", default=default_electric_car, description="electric_car")
-    ] = bool
-    data_schema[
-        vol.Optional("day_electricity_consumption", default=default_day_electricity_consumption, description="day_electricity_consumption")
-    ] = int
-    data_schema[
-        vol.Optional("night_electricity_consumption", default=default_night_electricity_consumption, description="night_electricity_consumption")
-    ] = int
-    data_schema[
-        vol.Optional("excl_night_electricity_consumption", default=default_excl_night_electricity_consumption, description="excl_night_electricity_consumption")
-    ] = int
-    data_schema[
-        vol.Required("solar_panels", default=default_solar_panels, description="solar_panels")
-    ] = bool
-    data_schema[
-        vol.Optional("electricity_injection", default=default_electricity_injection, description="electricity_injection")
-    ] = int
-    data_schema[
-        vol.Optional("electricity_injection_night", default=default_electricity_injection_night, description="electricity_injection_night")
-    ] = int
-    data_schema[
-        vol.Optional("inverter_power", default=default_inverter_power, description="inverter_power")
-    ] = vol.Coerce(float)
-    data_schema[
-        vol.Required("gas_provider", default=default_gas_provider, description="gas_provider")
-    ] = selector({
-                "select": {
-                    "options": provider_names,
-                    "mode": "dropdown"
-                }
-            })
-    data_schema[
-        vol.Optional("gas_consumption", default=default_gas_consumption, description="gas_consumption")
-    ] = int
-    data_schema[
-        vol.Required("combine_elec_and_gas", default=default_combine_elec_and_gas, description="combine_elec_and_gas")
-    ] = bool      
-    data_schema[
-        vol.Required("directdebit_invoice", default=default_directdebit_invoice, description="directdebit_invoice")
-    ] = bool
-    data_schema[
-        vol.Required("email_invoice", default=default_email_invoice, description="email_invoice")
-    ] = bool
-    data_schema[
-        vol.Required("online_support", default=default_online_support, description="online_support")
-    ] = bool
-    data_schema[
-        vol.Required("add_details", default=default_add_details, description="add_details")
-    ] = bool
-    data_schema[
-        vol.Required("vtest_enabled", default=default_vtest_enabled, description="vtest_enabled")
-    ] = bool
+def creer_schema(valeurs=None):
+    """Schéma du formulaire, prérempli avec les valeurs existantes en modification."""
+    valeurs = valeurs or {}
+    schema = OrderedDict()
+    for cle, defaut, type_champ in CHAMPS:
+        valeur = valeurs.get(cle, defaut)
+        cle_schema = vol.Required if cle in OBLIGATOIRES else vol.Optional
+        if type_champ == "fournisseur":
+            schema[cle_schema(cle, default=_ancienne_valeur_fournisseur(valeur))] = selector(
+                {"select": {"options": FOURNISSEURS, "mode": "dropdown", "custom_value": True}}
+            )
+        elif type_champ is float:
+            schema[cle_schema(cle, default=valeur)] = vol.Coerce(float)
+        else:
+            schema[cle_schema(cle, default=valeur)] = type_champ
+    return vol.Schema(schema)
 
-    return data_schema
-
-          
-        
 
 class ComponentFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for component."""
+    """Ajout de l'intégration."""
 
     VERSION = 1
 
-    def __init__(self):
-        """Initialize."""
-        self._errors = {}
-
-
-    async def async_step_user(self, user_input=None):  # pylint: disable=dangerous-default-value
-        """Handle a flow initialized by the user."""
-
+    async def async_step_user(self, user_input=None):
         if user_input is not None:
             return self.async_create_entry(title=NAME, data=user_input)
-
-        return await self._show_config_form(user_input)
-
-    async def _show_config_form(self, user_input):
-        """Show the configuration form to edit location data."""
-        data_schema = create_schema(user_input)
-        return self.async_show_form(
-            step_id="user", data_schema=vol.Schema(data_schema), errors=self._errors
-        )
-
-    async def async_step_import(self, user_input):  # pylint: disable=unused-argument
-        """Import a config entry.
-        Special type of import, we're not actually going to store any data.
-        Instead, we're going to rely on the values that are in config file.
-        """
-        return self.async_create_entry(title="configuration.yaml", data={})
+        return self.async_show_form(step_id="user", data_schema=creer_schema())
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        """Get the options flow for this handler."""
-        return ComponentOptionsHandler(config_entry)
+        return ComponentOptionsHandler()
 
 
-
-
-class ComponentOptionsHandler(config_entries.ConfigFlow):
-    """Now this class isnt like any normal option handlers.. as ha devs option seems think options is
-    #  supposed to be EXTRA options, i disagree, a user should be able to edit anything.."""
-
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
-        self.options = dict(config_entry.options)
-        self._errors = {}
+class ComponentOptionsHandler(config_entries.OptionsFlow):
+    """Modification de la configuration : tous les champs sont modifiables."""
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_form(
-            step_id="edit",
-            data_schema=vol.Schema(create_schema(self.config_entry, option=True)),
-            errors=self._errors,
-        )
-
-    async def async_step_edit(self, user_input):
-        _LOGGER.debug(f"{NAME} async_step_edit user_input: {user_input}")
         if user_input is not None:
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=user_input
-            )
-            return self.async_create_entry(title=NAME, data=user_input)
-        return self.async_show_form(
-            step_id="edit",
-            data_schema=vol.Schema(create_schema(self.config_entry, option=True)),
-            errors=self._errors,
-        )
+            _LOGGER.debug("%s nouvelle configuration : %s", NAME, user_input)
+            # Les anciens champs (sites MijnEnergie / VTest) ne sont pas conservés.
+            self.hass.config_entries.async_update_entry(self.config_entry, data=user_input)
+            return self.async_create_entry(title=NAME, data={})
+        return self.async_show_form(step_id="init", data_schema=creer_schema(self.config_entry.data))

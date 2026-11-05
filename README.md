@@ -1,155 +1,90 @@
-[![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg)](https://github.com/hacs/default)
-[![GitHub release](https://img.shields.io/github/release/myTselection/MyEnergy.svg)](https://github.com/myTselection/MyEnergy/releases)
-![GitHub repo size](https://img.shields.io/github/repo-size/myTselection/MyEnergy.svg)
+# MyEnergy – comparateur d'énergie pour la Wallonie (Home Assistant)
 
-[![GitHub issues](https://img.shields.io/github/issues/myTselection/MyEnergy.svg)](https://github.com/myTselection/MyEnergy/issues)
-[![GitHub last commit](https://img.shields.io/github/last-commit/myTselection/MyEnergy.svg)](https://github.com/myTselection/MyEnergy/commits/master)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/myTselection/MyEnergy.svg)](https://github.com/myTselection/MyEnergy/graphs/commit-activity)
+Intégration Home Assistant qui compare les offres d'électricité (et de gaz) en **Wallonie** à partir du comparateur officiel du régulateur wallon, la **CWaPE** ([compacwape.be](https://www.compacwape.be/)), et les met en regard de votre propre contrat.
 
-https://github.com/myTselection/MyEnergy/tree/master
+> **Origine du projet** – Cette intégration est un clone mis à jour de [MyEnergy](https://github.com/myTselection/MyEnergy), créée par **myTselection** (licence MIT). Le dépôt d'origine n'existe plus et les sites qu'il utilisait (MijnEnergie.be, comparateur.be) ne fournissent plus de résultats. Ce clone, maintenu par **sfcamil**, remplace ces sources par l'API publique de la CWaPE. Merci à myTselection pour le travail d'origine.
 
-# My Energy - MijnEnergie.be Home Assistant integration
+Ce projet n'est affilié ni à la CWaPE, ni à aucun fournisseur d'énergie.
 
-## Fork note (sfcamil)
-The original repository (myTselection/MyEnergy) has been deleted and MijnEnergie.be no longer serves results to this integration. Since v4.1.0, postal codes in **Wallonia** are priced through the official CWaPE comparator API (`api.compacwape.be`, same offers as https://www.compacwape.be/). The `Fixed` / `Variable` sensors show the cheapest fixed / variable offer (social tariff and dynamic contracts excluded), all-in yearly cost including network costs and VAT. Solar panel injection is not taken into account yet for CWaPE. Other regions still use the original (currently broken) MijnEnergie path or the optional VTest (Flanders) sensors.
+## Ce que fait l'intégration
 
-### Offers card
-The integration ships its own dashboard card, loaded automatically (no resource to add). In a dashboard: *Add card* → search **MyEnergy offers**. It shows the cheapest offers per contract type, your own contract (set *current product*, e.g. `EASY`, in the integration options) and the possible yearly savings.
+- Envoie votre profil de consommation au comparateur de la CWaPE (sans compte, environ une fois par heure).
+- Calcule pour chaque offre le **coût annuel tout compris** : énergie, frais de réseau, taxes et TVA, avec les mêmes règles que le site de la CWaPE.
+- Crée un capteur par énergie et par type de contrat, par exemple :
+  - `sensor.myenergy_6220_electricity_fixed` – meilleure offre à **prix fixe** ;
+  - `sensor.myenergy_6220_electricity_variable` – meilleure offre à **prix variable**.
+- Compare avec **votre contrat** : soit le produit de votre fournisseur aux prix du jour, soit, plus précis, avec **vos propres prix** recopiés depuis votre décompte annuel.
+- Fournit une **carte de tableau de bord** prête à l'emploi.
 
-For an exact comparison, fill in your own contract prices in the integration options (*own price day/night/exclusive night*, *own fixed fee*, *own green cost*, all excl. VAT as printed on the annual statement). Your yearly cost is then computed with your prices plus the same network costs and taxes as the offers, instead of today's price of your product.
+Les contrats dynamiques et le tarif social ne sont pas pris en compte. Les panneaux solaires (injection) ne sont pas encore gérés.
+
+## Installation
+
+1. Dans **Marketplace** (anciennement HACS) : menu ⋮ → **Dépôts personnalisés** → ajouter `https://github.com/sfcamil/MyEnergy`, type **Integration**.
+2. Installer **MyEnergy**, puis **redémarrer Home Assistant** (redémarrage complet).
+3. **Paramètres → Appareils et services → Ajouter une intégration → MyEnergy**.
+
+## Configuration
+
+Toutes les valeurs se trouvent sur votre **décompte annuel** (facture de régularisation). Elles restent modifiables ensuite via **Configurer**.
+
+| Champ | Description |
+|---|---|
+| Code postal | Code postal en Wallonie (ex. `6220`). |
+| Fournisseur d'électricité actuel | Votre fournisseur (ex. `Engie`). |
+| Nom de votre produit actuel | Facultatif, ex. `EASY`. Sert à vous comparer au même produit aux prix du jour. |
+| Compteur intelligent | Cocher si vous avez un compteur numérique. |
+| Consommation jour / heures pleines | En kWh par an. Compteur simple : toute votre consommation ici. |
+| Consommation nuit / heures creuses | En kWh par an, pour un compteur bi-horaire. Sinon 0. |
+| Consommation exclusif nuit | En kWh par an, pour un compteur exclusif nuit. Sinon 0. |
+| Vos prix (jour, nuit, exclusif nuit) | Facultatif. Prix de l'énergie de **votre** contrat en €/kWh **hors TVA**, tels qu'imprimés sur le décompte. |
+| Votre redevance fixe | Facultatif. En €/an hors TVA (ex. 11,41 € pour 64 jours → 11,41 × 365 / 64 = 65,07). |
+| Votre coût énergie verte | Facultatif. En €/kWh hors TVA (montant « coûts énergie verte » ÷ kWh consommés). |
+| Fournisseur et consommation de gaz | Facultatif. Laisser 0 si vous n'avez pas le gaz. |
+
+**Pourquoi entrer vos propres prix ?** Un contrat à prix fixe garde le prix du moment où il a été conclu. Le même produit aux prix d'aujourd'hui peut être beaucoup plus cher (ou moins cher) : sans vos prix, l'économie affichée peut être trompeuse. Avec vos prix, votre coût annuel est calculé avec vos tarifs plus les mêmes frais de réseau et taxes que les offres.
+
+## Capteurs
+
+État : prix de la meilleure offre en **€/kWh**, TVA et frais de réseau compris.
+
+| Attribut | Contenu |
+|---|---|
+| `fournisseur`, `produit`, `url` | Meilleure offre et lien vers sa fiche tarifaire |
+| `coût énergie (€/an)` | Partie fournisseur de la meilleure offre |
+| `coût réseau et taxes (€/an)` | Frais de réseau, taxes et redevances (identiques pour tous les fournisseurs) |
+| `prix total (€/an)` | Coût annuel total de la meilleure offre |
+| `consommation (kWh/an)` | Consommation utilisée pour le calcul |
+| `offres` | Les 10 meilleures offres : `fournisseur`, `produit`, `type_contrat`, `prix_kwh`, `prix_an`, `url` |
+| `votre contrat` | Votre contrat, au même format |
+| `économie par an` | Différence avec la meilleure offre (négatif : votre contrat est moins cher) |
+| `mise à jour` | Date de la dernière comparaison |
+
+Exemple de modèle : `{{ state_attr('sensor.myenergy_6220_electricity_fixed', 'économie par an') }}`
+
+## Carte « Offres MyEnergy »
+
+La carte est livrée avec l'intégration et chargée automatiquement : aucune ressource à ajouter. Dans un tableau de bord : **Ajouter une carte** → chercher **« Offres MyEnergy »**.
+
+Elle affiche les meilleures offres fixes et variables, met en évidence la meilleure offre et votre contrat, et indique l'économie possible.
 
 ```yaml
 type: custom:myenergy-offers-card
-# optional:
-# title: Energy offers
+# Facultatif :
+# title: Comparateur d'énergie
 # max_offers: 5
 # entities:
 #   - sensor.myenergy_6220_electricity_fixed
+#   - sensor.myenergy_6220_electricity_variable
 ```
 
-[Mijn Energie](https://www.mijnenergie.be/) Home Assistant custom component integration for Belgium. This custom component has been built from the ground up to bring MijnEnergie.be site data into Home Assistant sensors in order to follow up the cheapest energy electricty and gas prices. This integration is built against the public website provided by MijnEnergie.be for Belgium and has not been tested for any other countries.
+## Limites
 
-This integration is in no way affiliated with MijnEnergie. 
+- Seule la **Wallonie** est couverte (comparateur de la CWaPE).
+- Profil résidentiel, puissance de raccordement par défaut (6,1 à 9,6 kVA).
+- Pas d'injection photovoltaïque, pas de contrats dynamiques.
+- Les prix sont ceux publiés par les fournisseurs auprès de la CWaPE ; en cas de doute, la fiche tarifaire du fournisseur fait foi.
 
-| :warning: Please don't report issues with this integration to MijnEnergie.be, they will not be able to support you. |
-| --------------------------------------------------------------------------------------------------------------------|
+## Licence
 
-For local gas station fuel prices and mazout, please check out my other custom integration [Carbu.com](https://github.com/myTselection/Carbu_com)
-
-<p align="center"><img src="https://raw.githubusercontent.com/myTselection/MyEnergy/master/icon.png"/></p>
-
-
-## Installation
-- [HACS](https://hacs.xyz/): add url https://github.com/myTselection/MyEnergy as custom repository (HACS > Integration > option: Custom Repositories)
-	- [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=myTselection&repository=MyEnergy&category=integration)
-
-- Restart Home Assistant
-- Add 'MyEnergy' integration via HA Settings > 'Devices and Services' > 'Integrations'
-
-
-
-## Integration
-Device `MyEnergy` should become available with the following sensors:
-- <details><summary><code>MyEnergy [postalcode] [FuelType] [ContractType]</code> with details on cheapest market energy rate that can be available to you (if you'd change contract), taking into account your configured criteria</summary>
-
-
-	| Attribute | Description |
-	| --------- | ----------- |
-	| State     | cost in € per kWh  |
-	| Last update   | Timestamp of last data refresh, throttled to limit data fetch to 1h |
-	| Postalcode    | Postalcode used to retrieve the prices |
-	| Fuel type     | Fuel type (Electricity or Gas) used to retrieve the prices |
-	| Contract type | Contract type (Fixed or Variable) used to retrieve the prices |
-	| Url           | Full url that was used to retrieve the data, throught this url, full details can be seen and contract can be requested |
- 	| Provider Name | Name of the provider of the cheapest subscription for which a match was found |
-	| Contract Name | Name of the cheapest subscription for which a match was found |
-	| Energycost    | Energycost (provider dependent part of subscription cost) of the cheapest subscription for which a match was found |
-	| Netrate       | Netrate  (fixed part of subscription cost) of the cheapest subscription for which a match was found |
-	| Promo         | Promo (provider dependent promotion, part of subscription cost) of the cheapest subscription for which a match was found |
-	| Total price per year    | Total price per year of the cheapest subscription for which a match was found |
-	| Total kWh per year      | Total kWh per year on wich the lookup is based (total combination of day/night/... consumptions) |
-  | fulldetail | If configuration option to add product and price detail json is enabled, all site data will be added as a json to enable fetching extra contract specific data. Example to fetch data out of it `{{state_attr('sensor.myenergy_1190_electricity_fixed','fulldetail')[0].Dagtarief[0]}}` |
-	
-</details>
-
-## Status
-Still some optimisations are planned, see [Issues](https://github.com/myTselection/MyEnergy/issues) section in GitHub.
-
-## Technical pointers
-The main logic and API connection related code can be found within source code MyEnergy/custom_components/MyEnery:
-- [sensor.py](https://github.com/myTselection/MyEnergy/blob/master/custom_components/myenergy/sensor.py)
-- [utils.py](https://github.com/myTselection/MyEnergy/blob/master/custom_components/myenergy/utils.py) -> mainly ComponentSession class
-
-All other files just contain boilerplat code for the integration to work wtihin HA or to have some constants/strings/translations.
-
-If you would encounter some issues with this custom component, you can enable extra debug logging by adding below into your `configuration.yaml`:
-<details><summary>Click to show example</summary>
-	
-```
-logger:
-  default: info
-  logs:
-     custom_components.myenergy: debug
-```
-</details>
-
-## Statistics
-In order to keep long term statistics, you could create statistics sensors such as example below (I'm still experimenting with best config):
-in `configuration.yaml`:
-<details><summary>Click to show example</summary>
-	
-```
-sensor: 
-  - platform: statistics
-    name: "MyEnergy Electricity Fixed statistics"
-    entity_id: sensor.myenergy_[postalcode]_electricty_fixed
-    state_characteristic: average_linear
-    sampling_size: 20
-    max_age:
-      hours: 24
-  - platform: statistics
-    name: "MyEnergy Electricity Variable statistics"
-    entity_id: sensor.myenergy_[postalcode]_electricty_variable
-    state_characteristic: average_linear
-    sampling_size: 20
-    max_age:
-      hours: 24
-  - platform: statistics
-    name: "MyEnergy Gas Fixed statistics"
-    entity_id: sensor.myenergy_[postalcode]_gas_fixed
-    state_characteristic: average_linear
-    sampling_size: 20
-    max_age:
-      hours: 24
-  - platform: statistics
-    name: "MyEnergy Gas Variable statistics"
-    entity_id: sensor.myenergy_[postalcode]_gas_variable
-    state_characteristic: average_linear
-    sampling_size: 20
-    max_age:
-      hours: 24
-```
-</details>
-
-### Statistics Graph
-Based on these statistics sensors that will become available after HA rebooted, you can add a Statistics Graph.
-<details><summary>Click to show example</summary>
-
-
-Dashboard:
-```
-      - chart_type: line
-        period: month
-        type: statistics-graph
-        entities:
-          - sensor.myenergy_electricity_fixed_statistics
-          - sensor.myenergy_electricity_variable_statistics
-          - sensor.myenergy_gas_fixed_statistics
-          - sensor.myenergy_gas_variable_statistics
-        stat_types:
-          - mean
-          - min
-          - max
-        title: Mijn Energie
-```
-</details>
+MIT – voir [LICENSE](LICENSE). Code d'origine © myTselection, modifications © sfcamil.

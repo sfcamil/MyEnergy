@@ -2,107 +2,49 @@
   "config": {
     "step": {
       "user": {
-        "description": "Setup MyEnergy sensors.",
+        "title": "MyEnergy",
+        "description": "Compare electricity and gas offers in Wallonia with the official CWaPE comparator. Consumption and your prices are on your annual statement.",
         "data": {
-          "postalcode": "Belgian postalcode",
-          "electricity_digital_counter": "Digital electricity counter",
-          "day_electricity_consumption": "Average electricity consumption per year daytime (kWh)",
-          "night_electricity_consumption": "Average electricity consumption per year nighttime and weekend (kWh)",
-          "excl_night_electricity_consumption": "Average electricity consumption per year exclusive nighttime (kWh)",
-          "solar_panels": "Solar panels",
-          "electricity_injection": "Electricity injection (kWh)",
-          "electricity_injection_night": "Electricity injection night and weekend (kWh)",
-          "inverter_power": "What is the total power of the inverter(s) of your installation? (kW, eg 3.5)",
-          "electricity_provider": "Select your current electricity provider",
-          "current_product": "Your current electricity product name, optional (e.g. EASY) - used to compare offers with your own contract",
-          "own_price_day": "Your contract: energy price day / peak hours (EUR/kWh excl. VAT, as on your annual statement, 0 = unknown)",
-          "own_price_night": "Your contract: energy price night / off-peak hours (EUR/kWh excl. VAT)",
-          "own_price_excl_night": "Your contract: energy price exclusive night (EUR/kWh excl. VAT)",
+          "postalcode": "Postal code (Wallonia)",
+          "electricity_provider": "Current electricity provider",
+          "current_product": "Your current product name (optional, e.g. EASY)",
+          "electricity_digital_counter": "Smart (digital) electricity meter",
+          "day_electricity_consumption": "Yearly consumption day / peak hours (kWh) — single-rate meter: all consumption",
+          "night_electricity_consumption": "Yearly consumption night / off-peak hours (kWh) — 0 for a single-rate meter",
+          "excl_night_electricity_consumption": "Yearly consumption exclusive night (kWh)",
+          "own_price_day": "Your contract: price day / peak hours (EUR/kWh excl. VAT, as on the annual statement; 0 = unknown)",
+          "own_price_night": "Your contract: price night / off-peak hours (EUR/kWh excl. VAT)",
+          "own_price_excl_night": "Your contract: price exclusive night (EUR/kWh excl. VAT)",
           "own_fixed_fee": "Your contract: fixed fee (EUR/year excl. VAT)",
           "own_green_cost": "Your contract: green energy cost (EUR/kWh excl. VAT)",
-          "electric_car": "Electrical car",
-          "gas_consumption": "Average gas consumption per year (kWh)",
-          "combine_elec_and_gas": "Combine electricity and gas from the same provider",
-          "gas_provider": "Select your current gas provider",
-          "directdebit_invoice": "Mandatory payment of invoice by direct debit",
-          "email_invoice": "Send invoice only via e-mail",
-          "online_support": "Customer service access only via email/internet",
-          "add_details": "Add extended product and price details as json",
-          "vtest_enabled": "Enable VTest (VREG) comparison sensors"
-        }
-      },
-      "edit": {
-        "description": "Setup MyEnergy sensors.",
-        "data": {
-          "postalcode": "Belgian postalcode",
-          "electricity_digital_counter": "Digital electricity counter",
-          "day_electricity_consumption": "Average electricity consumption per year daytime (kWh)",
-          "night_electricity_consumption": "Average electricity consumption per year nighttime and weekend (kWh)",
-          "excl_night_electricity_consumption": "Average electricity consumption per year exclusive nighttime (kWh)",
-          "solar_panels": "Solar panels",
-          "electricity_injection": "Electricity injection (kWh)",
-          "electricity_injection_night": "Electricity injection night and weekend (kWh)",
-          "inverter_power": "What is the total power of the inverter(s) of your installation?",
-          "electricity_provider": "Select your current electricity provider",
-          "current_product": "Your current electricity product name, optional (e.g. EASY) - used to compare offers with your own contract",
-          "own_price_day": "Your contract: energy price day / peak hours (EUR/kWh excl. VAT, as on your annual statement, 0 = unknown)",
-          "own_price_night": "Your contract: energy price night / off-peak hours (EUR/kWh excl. VAT)",
-          "own_price_excl_night": "Your contract: energy price exclusive night (EUR/kWh excl. VAT)",
-          "own_fixed_fee": "Your contract: fixed fee (EUR/year excl. VAT)",
-          "own_green_cost": "Your contract: green energy cost (EUR/kWh excl. VAT)",
-          "electric_car": "Electrical car",
-          "gas_consumption": "Average gas consumption per year (kWh)",
-          "combine_elec_and_gas": "Combine electricity and gas from the same provider",
-          "gas_provider": "Select your current gas provider",
-          "directdebit_invoice": "Mandatory payment of invoice by direct debit",
-          "email_invoice": "Send invoice only via e-mail",
-          "online_support": "Customer service access only via email/internet",
-          "add_details": "Add extended product and price details as json",
-          "vtest_enabled": "Enable VTest (VREG) comparison sensors"
+          "gas_provider": "Current gas provider",
+          "gas_consumption": "Yearly gas consumption (kWh) — 0 if no gas"
         }
       }
-    },
-    "error": {
-      "missing data options handler": "Option handler failed",
-      "no_valid_settings": "No valid settings check in ha config."
     }
   },
   "options": {
     "step": {
-      "edit": {
-        "description": "Setup MyEnergy sensors.",
+      "init": {
+        "title": "MyEnergy",
+        "description": "Edit the MyEnergy configuration.",
         "data": {
-          "postalcode": "Belgian postalcode",
-          "electricity_digital_counter": "Digital electricity counter",
-          "day_electricity_consumption": "Average electricity consumption per year daytime (kWh)",
-          "night_electricity_consumption": "Average electricity consumption per year nighttime and weekend (kWh)",
-          "excl_night_electricity_consumption": "Average electricity consumption per year exclusive nighttime (kWh)",
-          "solar_panels": "Solar panels",
-          "electricity_injection": "Electricity injection (kWh)",
-          "electricity_injection_night": "Electricity injection night and weekend (kWh)",
-          "inverter_power": "What is the total power of the inverter(s) of your installation?",
-          "electricity_provider": "Select your current electricity provider",
-          "current_product": "Your current electricity product name, optional (e.g. EASY) - used to compare offers with your own contract",
-          "own_price_day": "Your contract: energy price day / peak hours (EUR/kWh excl. VAT, as on your annual statement, 0 = unknown)",
-          "own_price_night": "Your contract: energy price night / off-peak hours (EUR/kWh excl. VAT)",
-          "own_price_excl_night": "Your contract: energy price exclusive night (EUR/kWh excl. VAT)",
+          "postalcode": "Postal code (Wallonia)",
+          "electricity_provider": "Current electricity provider",
+          "current_product": "Your current product name (optional, e.g. EASY)",
+          "electricity_digital_counter": "Smart (digital) electricity meter",
+          "day_electricity_consumption": "Yearly consumption day / peak hours (kWh) — single-rate meter: all consumption",
+          "night_electricity_consumption": "Yearly consumption night / off-peak hours (kWh) — 0 for a single-rate meter",
+          "excl_night_electricity_consumption": "Yearly consumption exclusive night (kWh)",
+          "own_price_day": "Your contract: price day / peak hours (EUR/kWh excl. VAT, as on the annual statement; 0 = unknown)",
+          "own_price_night": "Your contract: price night / off-peak hours (EUR/kWh excl. VAT)",
+          "own_price_excl_night": "Your contract: price exclusive night (EUR/kWh excl. VAT)",
           "own_fixed_fee": "Your contract: fixed fee (EUR/year excl. VAT)",
           "own_green_cost": "Your contract: green energy cost (EUR/kWh excl. VAT)",
-          "electric_car": "Electrical car",
-          "gas_consumption": "Average gas consumption per year (kWh)",
-          "combine_elec_and_gas": "Combine electricity and gas from the same provider",
-          "gas_provider": "Select your current gas provider",
-          "directdebit_invoice": "Mandatory payment of invoice by direct debit",
-          "email_invoice": "Send invoice only via e-mail",
-          "online_support": "Customer service access only via email/internet",
-          "add_details": "Add extended product and price details as json",
-          "vtest_enabled": "Enable VTest (VREG) comparison sensors"
+          "gas_provider": "Current gas provider",
+          "gas_consumption": "Yearly gas consumption (kWh) — 0 if no gas"
         }
       }
-    },
-    "error": {
-      "missing data options handler": "Option handler failed",
-      "no_valid_settings": "No valid settings check in ha config."
     }
   }
 }
