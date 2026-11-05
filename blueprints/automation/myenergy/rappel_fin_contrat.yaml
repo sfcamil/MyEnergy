@@ -1,0 +1,108 @@
+blueprint:
+  name: MyEnergy – rappel avant la fin du contrat d'énergie
+  description: >-
+    Quelques semaines avant la fin de votre contrat, envoie votre coût actuel et
+    les meilleures offres fixe et variable du moment (comparateur de la CWaPE).
+    Pensez à changer la date de fin après chaque renouvellement.
+  domain: automation
+  source_url: https://github.com/sfcamil/MyEnergy/blob/master/blueprints/automation/myenergy/rappel_fin_contrat.yaml
+  input:
+    capteur_fixe:
+      name: Capteur des offres fixes
+      selector:
+        entity:
+          filter:
+            - integration: myenergy
+              domain: sensor
+    capteur_variable:
+      name: Capteur des offres variables
+      selector:
+        entity:
+          filter:
+            - integration: myenergy
+              domain: sensor
+    fin_contrat:
+      name: Date de fin du contrat
+      description: Indiquée sur votre décompte annuel (« la période en cours prend fin le … »).
+      selector:
+        date:
+    jours_avant:
+      name: Prévenir combien de jours avant
+      default: 42
+      selector:
+        number:
+          min: 1
+          max: 120
+          unit_of_measurement: jours
+          mode: box
+    heure:
+      name: Heure d'envoi
+      default: "09:00:00"
+      selector:
+        time:
+    telephones:
+      name: Téléphones (application Home Assistant)
+      description: Laisser vide pour ne pas envoyer de notification sur téléphone.
+      default: []
+      selector:
+        device:
+          multiple: true
+          filter:
+            - integration: mobile_app
+    telegram:
+      name: Chats Telegram
+      description: Bot et destinataire Telegram. Laisser vide pour ne pas utiliser Telegram.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: telegram_bot
+              domain: notify
+
+triggers:
+  - trigger: time
+    at: !input heure
+
+variables:
+  capteur_fixe: !input capteur_fixe
+  capteur_variable: !input capteur_variable
+  fin_contrat: !input fin_contrat
+  jours_avant: !input jours_avant
+  telephones: !input telephones
+  telegram: !input telegram
+  fixe: "{{ (state_attr(capteur_fixe, 'offres') or [{}])[0] }}"
+  variable: "{{ (state_attr(capteur_variable, 'offres') or [{}])[0] }}"
+  contrat: "{{ state_attr(capteur_fixe, 'votre contrat') or {} }}"
+  titre: "📅 Contrat d'énergie : fin le {{ strptime(fin_contrat, '%Y-%m-%d').strftime('%d/%m/%Y') }}"
+  message: >-
+    Votre prix va être recalculé : c'est le moment de comparer.
+    Votre contrat actuel : {{ contrat.produit }}, {{ contrat.prix_an | round(0) | int }} €/an.
+    Meilleure offre fixe : {{ fixe.fournisseur }} – {{ fixe.produit }}, {{ fixe.prix_an | round(0) | int }} €/an.
+    Meilleure offre variable : {{ variable.fournisseur }} – {{ variable.produit }}, {{ variable.prix_an | round(0) | int }} €/an.
+    Pensez à mettre à jour vos prix et la date de fin après le renouvellement.
+
+conditions:
+  - condition: template
+    value_template: "{{ (strptime(fin_contrat, '%Y-%m-%d').date() - now().date()).days == jours_avant | int }}"
+
+actions:
+  - repeat:
+      for_each: "{{ telephones }}"
+      sequence:
+        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+          data:
+            title: "{{ titre }}"
+            message: "{{ message }}"
+            data:
+              clickAction: https://www.compacwape.be/
+  - if: "{{ telegram | count > 0 }}"
+    then:
+      - action: telegram_bot.send_message
+        data:
+          entity_id: "{{ telegram }}"
+          title: "{{ titre }}"
+          message: "{{ message }}"
+          parse_mode: plain_text
+
+mode: single

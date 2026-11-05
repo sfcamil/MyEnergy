@@ -78,6 +78,17 @@ type: custom:myenergy-offers-card
 #   - sensor.myenergy_6220_electricity_variable
 ```
 
+## Alertes (blueprints)
+
+Deux modèles d'automatisation sont fournis, à importer dans Home Assistant puis à configurer par formulaire :
+
+| Blueprint | Rôle | Importer |
+|---|---|---|
+| Alerte offre intéressante | Prévient quand la meilleure offre fixe ou variable fait économiser au moins le seuil choisi (une seule fois au franchissement du seuil). | [![Importer](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fsfcamil%2FMyEnergy%2Fblob%2Fmaster%2Fblueprints%2Fautomation%2Fmyenergy%2Falerte_offre_interessante.yaml) |
+| Rappel fin de contrat | Quelques semaines avant la fin du contrat, envoie votre coût et les meilleures offres du moment. | [![Importer](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fsfcamil%2FMyEnergy%2Fblob%2Fmaster%2Fblueprints%2Fautomation%2Fmyenergy%2Frappel_fin_contrat.yaml) |
+
+Réglages dans le formulaire : capteurs MyEnergy, seuil d'économie (€/an), date de fin de contrat, nombre de jours avant, heure d'envoi, **téléphones** (application Home Assistant, plusieurs possibles) et **chats Telegram** (bot et destinataire, plusieurs possibles). Laisser une liste vide désactive ce canal.
+
 ## Limites
 
 - Seule la **Wallonie** est couverte (comparateur de la CWaPE).

@@ -1,0 +1,101 @@
+blueprint:
+  name: MyEnergy – alerte offre d'énergie intéressante
+  description: >-
+    Prévient quand la meilleure offre fixe ou variable du comparateur de la CWaPE
+    permet d'économiser au moins le seuil choisi par rapport à votre contrat.
+    L'alerte part une seule fois, au moment où le seuil est franchi.
+    Choisissez un ou plusieurs téléphones (application Home Assistant) et/ou un ou plusieurs chats Telegram.
+  domain: automation
+  source_url: https://github.com/sfcamil/MyEnergy/blob/master/blueprints/automation/myenergy/alerte_offre_interessante.yaml
+  input:
+    capteur_fixe:
+      name: Capteur des offres fixes
+      selector:
+        entity:
+          filter:
+            - integration: myenergy
+              domain: sensor
+    capteur_variable:
+      name: Capteur des offres variables
+      selector:
+        entity:
+          filter:
+            - integration: myenergy
+              domain: sensor
+    seuil:
+      name: Seuil d'économie
+      description: Économie annuelle minimale pour recevoir une alerte.
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 10
+          unit_of_measurement: "€/an"
+          mode: box
+    telephones:
+      name: Téléphones (application Home Assistant)
+      description: Laisser vide pour ne pas envoyer de notification sur téléphone.
+      default: []
+      selector:
+        device:
+          multiple: true
+          filter:
+            - integration: mobile_app
+    telegram:
+      name: Chats Telegram
+      description: Bot et destinataire Telegram (un par chat autorisé). Laisser vide pour ne pas utiliser Telegram.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: telegram_bot
+              domain: notify
+
+trigger_variables:
+  capteur_fixe: !input capteur_fixe
+  capteur_variable: !input capteur_variable
+  seuil: !input seuil
+
+triggers:
+  - trigger: template
+    id: fixe
+    value_template: "{{ state_attr(capteur_fixe, 'économie par an') | float(-1) >= seuil | float }}"
+  - trigger: template
+    id: variable
+    value_template: "{{ state_attr(capteur_variable, 'économie par an') | float(-1) >= seuil | float }}"
+
+variables:
+  telephones: !input telephones
+  telegram: !input telegram
+  capteur: "{{ capteur_fixe if trigger.id == 'fixe' else capteur_variable }}"
+  offre: "{{ (state_attr(capteur, 'offres') or [{}])[0] }}"
+  contrat: "{{ state_attr(capteur, 'votre contrat') or {} }}"
+  titre: "⚡ {{ state_attr(capteur, 'énergie') }} : {{ state_attr(capteur, 'économie par an') | round(0) | int }} €/an d'économie possible"
+  message: >-
+    Meilleure offre {{ trigger.id }} : {{ offre.fournisseur }} – {{ offre.produit }},
+    {{ '%.4f' | format(offre.prix_kwh) }} €/kWh ({{ offre.prix_an | round(0) | int }} €/an).
+    Votre contrat : {{ contrat.produit }}, {{ contrat.prix_an | round(0) | int }} €/an.
+    Fiche tarifaire : {{ offre.url }}
+
+actions:
+  - repeat:
+      for_each: "{{ telephones }}"
+      sequence:
+        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+          data:
+            title: "{{ titre }}"
+            message: "{{ message }}"
+            data:
+              clickAction: "{{ offre.url }}"
+  - if: "{{ telegram | count > 0 }}"
+    then:
+      - action: telegram_bot.send_message
+        data:
+          entity_id: "{{ telegram }}"
+          title: "{{ titre }}"
+          message: "{{ message }}"
+          parse_mode: plain_text
+
+mode: queued
