@@ -223,6 +223,7 @@ def normalize_input_config(config):
         "electricity_provider": electricity_provider,
         "gas_consumption": gas_consumption,
         "gas_provider": gas_provider,
+        "current_product": str(config.get("current_product", "") or "").strip(),
         "combine_elec_and_gas": bool(config.get("combine_elec_and_gas", False)),
         "directdebit_invoice": bool(config.get("directdebit_invoice", True)),
         "email_invoice": bool(config.get("email_invoice", True)),
@@ -740,11 +741,12 @@ def _cwape_offer_summary(entry, yearly_consumption):
         "product": entry["product"].get("name", ""),
         "price_kwh": round(entry["total"] / yearly_consumption, 4) if yearly_consumption > 0 else None,
         "price_year": round(entry["total"], 2),
+        "contract_type": entry["product"].get("billingBase", ""),
         "url": entry["product"].get("sheetPageUrl") or CWAPE_SITE_URL,
     }
 
 
-def _parse_cwape_results(power_data, contract_type, section_name, current_provider=None):
+def _parse_cwape_results(power_data, contract_type, section_name, current_provider=None, current_product=None):
     """Pick the cheapest CWaPE offer for the requested contract type (fixed or variable)."""
     if not power_data:
         return {}
@@ -762,11 +764,9 @@ def _parse_cwape_results(power_data, contract_type, section_name, current_provid
         )
         entry["energy"] += _cwape_item_total(product, item)
 
-    candidates = []
+    all_entries = []
     for entry in products.values():
         product = entry["product"]
-        if product.get("billingBase") != wanted_billing_base:
-            continue
         if entry["provider"].strip().lower() in CWAPE_EXCLUDED_PROVIDERS:
             continue
         network = sum(
@@ -776,7 +776,9 @@ def _parse_cwape_results(power_data, contract_type, section_name, current_provid
         entry["network"] = network
         entry["total"] = entry["energy"] + network
         if entry["total"] > 0:
-            candidates.append(entry)
+            all_entries.append(entry)
+
+    candidates = [e for e in all_entries if e["product"].get("billingBase") == wanted_billing_base]
 
     if not candidates:
         return {}
@@ -794,8 +796,16 @@ def _parse_cwape_results(power_data, contract_type, section_name, current_provid
         headings[1]: f"€ {best['network']:.2f}/jaar",
         "offers": [_cwape_offer_summary(e, yearly_consumption) for e in candidates[:CWAPE_TOP_OFFERS]],
     }
+    own = None
     if current_provider:
-        own = next((e for e in candidates if e["provider"].strip().lower() == current_provider.strip().lower()), None)
+        same_provider = [e for e in all_entries if e["provider"].strip().lower() == current_provider.strip().lower()]
+        same_provider.sort(key=lambda e: e["total"])
+        if current_product:
+            # The configured product can be fixed or variable: compare both sensors against it.
+            wanted = current_product.strip().lower()
+            own = next((e for e in same_provider if wanted in (e["product"].get("name") or "").lower()), None)
+        if own is None:
+            own = next((e for e in same_provider if e["product"].get("billingBase") == wanted_billing_base), None)
         if own is not None:
             json_data["current_provider_offer"] = _cwape_offer_summary(own, yearly_consumption)
             json_data["savings_per_year"] = round(own["total"] - best["total"], 2)
@@ -937,7 +947,7 @@ class ComponentSession(object):
 
         result = {}
         if parsed["electricity_comp"]:
-            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL, parsed["electricity_provider"]))
+            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL, parsed["electricity_provider"], parsed["current_product"]))
         if parsed["gas_comp"]:
             result.update(_parse_cwape_results(simulation.get("gas"), contract_type, FuelType.GAS.fullnameNL, parsed["gas_provider"]))
         return result

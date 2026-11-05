@@ -47,6 +47,7 @@ def create_schema(entry, option=False):
         default_combine_elec_and_gas = entry.data.get("combine_elec_and_gas", False)
         default_electricity_provider = entry.data.get("electricity_provider", "No provider")
         default_gas_provider = entry.data.get("gas_provider", "No provider")
+        default_current_product = entry.data.get("current_product", "")
         default_add_details = entry.data.get("add_details", False)
         default_vtest_enabled = entry.data.get("vtest_enabled", False)
     else:
@@ -67,6 +68,7 @@ def create_schema(entry, option=False):
         default_combine_elec_and_gas = False
         default_electricity_provider = "No provider"
         default_gas_provider = "No provider"
+        default_current_product = ""
         default_add_details = False
         default_vtest_enabled = False
 
@@ -83,6 +85,9 @@ def create_schema(entry, option=False):
                     "mode": "dropdown"
                 }
             })
+    data_schema[
+        vol.Optional("current_product", default=default_current_product, description="current_product")
+    ] = str
     data_schema[
         vol.Required("electricity_digital_counter", default=default_electricity_digital_counter, description="electricity_digital_counter")
     ] = bool

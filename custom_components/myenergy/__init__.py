@@ -9,6 +9,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import Platform
 import homeassistant.helpers.config_validation as cv
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from .utils import *
 
 manifestfile = Path(__file__).parent / 'manifest.json'
@@ -21,6 +23,8 @@ VERSION = manifest_data.get("version")
 ISSUEURL = manifest_data.get("issue_tracker")
 PLATFORMS = [Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+CARD_FILENAME = "myenergy-offers-card.js"
+CARD_URL = f"/{DOMAIN}_static/{CARD_FILENAME}"
 
 STARTUP = """
 -------------------------------------------------------------------
@@ -38,9 +42,18 @@ If you have any issues with this you need to open an issue here:
 _LOGGER = logging.getLogger(DOMAIN)
 
 
+async def _async_register_card(hass: HomeAssistant):
+    """Serve the offers card and load it in the frontend (no manual resource needed)."""
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(Path(__file__).parent / "frontend" / CARD_FILENAME), True)]
+    )
+    add_extra_js_url(hass, f"{CARD_URL}?v={VERSION}")
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up this component using YAML."""
     _LOGGER.info(STARTUP)
+    await _async_register_card(hass)
     if config.get(DOMAIN) is None:
         # We get her if the integration is set up using config flow
         return True
