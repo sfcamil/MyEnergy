@@ -1,6 +1,5 @@
 {
   "config": {
-    "title": "MyEnergy",
     "step": {
       "user": {
         "description": "Setup MyEnergy sensors.",
