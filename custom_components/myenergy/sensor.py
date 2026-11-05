@@ -20,7 +20,7 @@ from homeassistant.const import (
 
 from . import DOMAIN, NAME
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(DOMAIN)
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.0%z"
 
 
@@ -41,7 +41,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required("combine_elec_and_gas"): cv.boolean,
         vol.Required("electricity_digital_counter"): cv.boolean,
         vol.Required("solar_panels"): cv.boolean,
-        vol.Optional("inverter_power"): cv.positive_int
+        vol.Optional("inverter_power"): vol.Coerce(float),
+        vol.Optional("vtest_enabled", default=False): cv.boolean,
     }
 )
 
@@ -85,6 +86,16 @@ async def dry_setup(hass, config_entry, async_add_devices):
         sensors.append(sensorElecFixed)
         sensorElecVariable = ComponentSensor(componentData, postalcode, FuelType.ELECTRICITY,ContractType.VARIABLE)
         sensors.append(sensorElecVariable)
+
+    if config.get("vtest_enabled", False) and (electricity_comp or gas_comp):
+        vtestData = VtestData(config, hass)
+        await vtestData._forced_update()
+        if electricity_comp:
+            sensors.append(VtestSensor(vtestData, postalcode, FuelType.ELECTRICITY, ContractType.FIXED))
+            sensors.append(VtestSensor(vtestData, postalcode, FuelType.ELECTRICITY, ContractType.VARIABLE))
+        if gas_comp:
+            sensors.append(VtestSensor(vtestData, postalcode, FuelType.GAS, ContractType.FIXED))
+            sensors.append(VtestSensor(vtestData, postalcode, FuelType.GAS, ContractType.VARIABLE))
 
     async_add_devices(sensors)
 
@@ -131,6 +142,7 @@ def calculate_days_remaining(target_date):
 class ComponentData:
     def __init__(self, config, hass):
         self._config = config
+        self._parsed_inputs = normalize_input_config(config)
         self._hass = hass
         self._session = ComponentSession()
         self._postalcode = config.get("postalcode")
@@ -149,6 +161,7 @@ class ComponentData:
         self._last_update = None
         self._refresh_required = True
         self._refresh_retry = 0
+        self._comparison_unavailable_logged = False
 
     @property
     def unique_id(self):
@@ -166,20 +179,63 @@ class ComponentData:
             self._session = ComponentSession()
         
         self._last_update = datetime.now()
+        empty_contracts = []
+        parsed_any_contract = False
+        comparison_unavailable_message = None
         for contract_type in ContractType:
             if self._session:
                 _LOGGER.debug("Getting data for " + NAME)
                 try:
-                    self._details[contract_type.code] = await self._hass.async_add_executor_job(lambda: self._session.get_data(self._config, contract_type))
-                    self._refresh_retry = 0
+                    contract_details = await self._hass.async_add_executor_job(
+                        lambda: self._session.get_data(self._config, contract_type)
+                    )
+                    if contract_details is None:
+                        contract_details = {}
+
+                    # Always keep per-contract key to avoid noisy "missing contract" warnings downstream.
+                    self._details[contract_type.code] = contract_details
+
+                    if contract_details:
+                        parsed_any_contract = True
+                        self._refresh_retry = 0
+                        self._refresh_required = False
+                    else:
+                        empty_contracts.append(contract_type.code)
+                        self._refresh_required = True
+                except ComparisonUnavailableError as e:
+                    comparison_unavailable_message = str(e)
+                    self._details[contract_type.code] = {}
                     self._refresh_required = False
+                    self._refresh_retry = 5
+                    if not self._comparison_unavailable_logged:
+                        _LOGGER.warning(
+                            "%s %s",
+                            NAME,
+                            comparison_unavailable_message,
+                        )
+                        self._comparison_unavailable_logged = True
+                    # Prepopulate remaining contract keys so downstream sensors
+                    # don't hit the "not found" warning path.
+                    for ct in ContractType:
+                        if ct.code not in self._details:
+                            self._details[ct.code] = {}
+                    break
                 except Exception as e:
                     # Log the exception details
                     _LOGGER.warning(f"An exception occurred, will retry: {str(e)}", exc_info=True)
+                    self._details[contract_type.code] = self._details.get(contract_type.code, {})
+                    empty_contracts.append(contract_type.code)
                     self._refresh_required = True
                 _LOGGER.debug("Data fetched completed " + NAME)
             else:
                 _LOGGER.debug(f"{NAME} no session available")
+
+        if not comparison_unavailable_message and empty_contracts and not parsed_any_contract:
+            _LOGGER.warning(
+                "%s no data parsed for contract types %s",
+                NAME,
+                ",".join(empty_contracts),
+            )
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     async def _update(self):
@@ -216,6 +272,7 @@ class ComponentSensor(Entity):
         self._promo = None
         self._name = f"{NAME} {self._postalcode}"
         self._add_details = data._add_details
+        self._input_profile = data._parsed_inputs
 
     @property
     def state(self):
@@ -226,12 +283,27 @@ class ComponentSensor(Entity):
         await self._data.update()
         self._details = self._data._details        
         self._add_details = self._data._add_details
+        self._input_profile = self._data._parsed_inputs
         self._last_update =  self._data._last_update
         self._name = f"{NAME} {self._postalcode} {self._fuel_type.fullnameEN} {self._contract_type.fullname}"
         self._contract_type_details = self._details.get(self._contract_type.code)
         # _LOGGER.debug(f"self._contract_type_details: {self._contract_type_details}")
         if self._contract_type_details == None:
             _LOGGER.warning(f"{NAME} requested contract type {self._contract_type.code} not found, available data: {self._details}")
+            return
+        if not self._contract_type_details:
+            _LOGGER.debug("%s no parsed entries for contract type %s", NAME, self._contract_type.code)
+            self._price = None
+            self._priceyear = None
+            self._kWhyear = None
+            self._url = None
+            self._providername = None
+            self._contractname = None
+            self._energycost = None
+            self._netrate = None
+            self._promo = None
+            self._fueltype_detail = None
+            self._providerdetails = None
             return
         for fueltype_name in self._contract_type_details.keys():
             if self._fuel_type.fullnameNL in fueltype_name:
@@ -248,9 +320,16 @@ class ComponentSensor(Entity):
                 self._promo = self._providerdetails.get(headings[2],"")
                 price_info = self._providerdetails.get('Jaarlijkse kostprijs',[])
                 if len(price_info) > 0:
-                    self._price = price_info[0]
-                    self._price = self._price.replace('câ‚¬/kWh','').replace('c€/kWh','')
-                    self._price = float(self._price.replace('.','').replace(',', '.'))/100
+                    raw_price = price_info[0]
+                    raw_price = raw_price.replace('câ‚¬/kWh','').replace('c€/kWh','').strip()
+                    if ',' in raw_price and '.' in raw_price:
+                        # European with thousands sep: "1.032,87"
+                        raw_price = raw_price.replace('.', '').replace(',', '.')
+                    elif ',' in raw_price:
+                        # European decimal only: "32,87"
+                        raw_price = raw_price.replace(',', '.')
+                    # else standard dot-decimal: "32.87"
+                    self._price = float(raw_price) / 100
                     if len(price_info) >= 2:
                         self._kWhyear = price_info[1]
                         self._priceyear = price_info[2]
@@ -297,6 +376,7 @@ class ComponentSensor(Entity):
             "promo": self._promo,
             "total price per year": self._priceyear,
             "total kWh per year": self._kWhyear,
+            "input profile": self._input_profile,
             "fulldetail": self._fueltype_detail if self._add_details else "details disabled in config"
         }
 
@@ -310,7 +390,8 @@ class ComponentSensor(Entity):
                 (NAME, self._data.unique_id)
             },
             name=self._data.name,
-            manufacturer= NAME
+            manufacturer= NAME,
+            configuration_url="https://www.mijnenergie.be/"
         )
 
     @property
@@ -321,6 +402,239 @@ class ComponentSensor(Entity):
     @property
     def unit_of_measurement(self) -> str:
         """Return the unit of measurement this sensor expresses itself in."""
+        return "€/kWh"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.MONETARY
+
+    @property
+    def friendly_name(self) -> str:
+        return self.unique_id
+
+
+class VtestData:
+    """Coordinator that fetches and caches data from vtest.be."""
+
+    def __init__(self, config, hass):
+        self._config = config
+        self._parsed_inputs = normalize_input_config(config)
+        self._hass = hass
+        self._session = VtestSession()
+        self._postalcode = config.get("postalcode")
+        self._details = {}
+        self._last_update = None
+        self._refresh_required = True
+        self._refresh_retry = 0
+
+    @property
+    def unique_id(self):
+        return f"VTest {self._postalcode}"
+
+    @property
+    def name(self) -> str:
+        return self.unique_id
+
+    async def _forced_update(self):
+        _LOGGER.info("Fetching init stuff for VTest")
+        self._refresh_retry += 1
+        if not self._session:
+            self._session = VtestSession()
+
+        self._last_update = datetime.now()
+        empty_contracts = []
+        parsed_any_contract = False
+
+        for contract_type in ContractType:
+            _LOGGER.debug("VTest: Getting data for contract type %s", contract_type.code)
+            try:
+                contract_details = await self._hass.async_add_executor_job(
+                    lambda ct=contract_type: self._session.get_data(self._config, ct)
+                )
+                if contract_details is None:
+                    contract_details = {}
+
+                self._details[contract_type.code] = contract_details
+
+                if contract_details:
+                    parsed_any_contract = True
+                    self._refresh_retry = 0
+                    self._refresh_required = False
+                else:
+                    empty_contracts.append(contract_type.code)
+                    self._refresh_required = True
+            except Exception as e:
+                _LOGGER.warning("VTest: Exception fetching data, will retry: %s", str(e), exc_info=True)
+                self._details[contract_type.code] = self._details.get(contract_type.code, {})
+                empty_contracts.append(contract_type.code)
+                self._refresh_required = True
+            _LOGGER.debug("VTest: Data fetch complete for %s", contract_type.code)
+
+        if empty_contracts and not parsed_any_contract:
+            _LOGGER.warning("VTest: No data parsed for contract types %s", ",".join(empty_contracts))
+
+    @Throttle(MIN_TIME_BETWEEN_UPDATES)
+    async def _update(self):
+        await self._forced_update()
+
+    async def update(self):
+        needs_forced_refresh = (
+            self._details is None or self._details == {} or self._refresh_required
+        )
+
+        if needs_forced_refresh:
+            if self._refresh_retry < 5:
+                await self._forced_update()
+            else:
+                _LOGGER.warning(
+                    "VTest: Refresh retry limit reached (%s), skipping forced update",
+                    self._refresh_retry,
+                )
+            return
+
+        await self._update()
+    def clear_session(self):
+        self._session = None
+
+
+class VtestSensor(Entity):
+    """Sensor entity exposing the best vtest.be contract for a fuel/contract type."""
+
+    def __init__(self, data: VtestData, postalcode, fuel_type: FuelType, contract_type: ContractType):
+        self._data = data
+        self._details = data._details
+        self._last_update = data._last_update
+        self._price = None
+        self._priceyear = None
+        self._kWhyear = None
+        self._fuel_type = fuel_type
+        self._fueltype_detail = None
+        self._contract_type = contract_type
+        self._postalcode = postalcode
+        self._providerdetails = None
+        self._url = None
+        self._providername = None
+        self._contractname = None
+        self._energycost = None
+        self._netrate = None
+        self._promo = None
+        self._add_details = data._config.get("add_details", False)
+        self._input_profile = data._parsed_inputs
+
+    @property
+    def state(self):
+        return self._price
+
+    async def async_update(self):
+        await self._data.update()
+        self._details = self._data._details
+        self._add_details = self._data._config.get("add_details", False)
+        self._input_profile = self._data._parsed_inputs
+        self._last_update = self._data._last_update
+
+        # Reset all payload fields before repopulating to avoid stale values
+        self._price = None
+        self._priceyear = None
+        self._kWhyear = None
+        self._url = None
+        self._providername = None
+        self._contractname = None
+        self._energycost = None
+        self._netrate = None
+        self._promo = None
+        self._fueltype_detail = None
+        self._providerdetails = None
+
+        self._contract_type_details = self._details.get(self._contract_type.code)
+
+        if self._contract_type_details is None:
+            _LOGGER.warning(
+                "VTest: Requested contract type %s not found, available: %s",
+                self._contract_type.code,
+                self._details,
+            )
+            return
+        if not self._contract_type_details:
+            _LOGGER.debug("VTest: No parsed entries for contract type %s", self._contract_type.code)
+            return
+
+        for fueltype_name in self._contract_type_details.keys():
+            if self._fuel_type.fullnameNL in fueltype_name:
+                self._fueltype_detail = self._contract_type_details.get(fueltype_name)
+                _LOGGER.debug(
+                    "VTest fueltype_detail: %s - %s - %s",
+                    self._contract_type,
+                    fueltype_name,
+                    self._fueltype_detail,
+                )
+                self._providerdetails = self._fueltype_detail[0]
+                self._url = self._providerdetails.get("url", "")
+                self._providername = self._providerdetails.get("provider", "")
+                self._contractname = self._providerdetails.get("name", "")
+                self._energycost = self._providerdetails.get(headings[0], "")
+                self._netrate = self._providerdetails.get(headings[1], "")
+                self._promo = self._providerdetails.get(headings[2], "")
+                price_info = self._providerdetails.get("Jaarlijkse kostprijs", [])
+                if len(price_info) > 0:
+                    raw_price = price_info[0].replace("c€/kWh", "").strip()
+                    if "," in raw_price and "." in raw_price:
+                        raw_price = raw_price.replace(".", "").replace(",", ".")
+                    elif "," in raw_price:
+                        raw_price = raw_price.replace(",", ".")
+                    self._price = float(raw_price) / 100
+                    if len(price_info) >= 3:
+                        self._kWhyear = price_info[1]
+                        self._priceyear = price_info[2]
+
+    async def async_will_remove_from_hass(self):
+        _LOGGER.info("async_will_remove_from_hass VTest")
+        self._data.clear_session()
+
+    @property
+    def icon(self) -> str:
+        if self._fuel_type == FuelType.GAS:
+            return "mdi:meter-gas"
+        return "mdi:transmission-tower"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._data.unique_id} {self._fuel_type.fullnameEN} {self._contract_type.fullname}"
+
+    @property
+    def name(self) -> str:
+        return self.unique_id
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            ATTR_ATTRIBUTION: "VTest (VREG)",
+            "last update": self._last_update,
+            "postalcode": self._postalcode,
+            "fuel type": self._fuel_type.fullnameEN,
+            "contract type": self._contract_type.fullname,
+            "url": self._url,
+            "provider name": self._providername,
+            "contract name": self._contractname,
+            "energy cost": self._energycost,
+            "netrate": self._netrate,
+            "promo": self._promo,
+            "total price per year": self._priceyear,
+            "total kWh per year": self._kWhyear,
+            "input profile": self._input_profile,
+            "fulldetail": self._fueltype_detail if self._add_details else "details disabled in config",
+        }
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(NAME, self._data.unique_id)},
+            name=self._data.name,
+            manufacturer="VTest (VREG)",
+            configuration_url="https://www.vtest.be/",
+        )
+
+    @property
+    def unit_of_measurement(self) -> str:
         return "€/kWh"
 
     @property

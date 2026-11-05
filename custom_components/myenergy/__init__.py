@@ -8,7 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import Platform
-import homeassistant.helpers.config_validation as cv
 from .utils import *
 
 manifestfile = Path(__file__).parent / 'manifest.json'
@@ -20,7 +19,6 @@ NAME = manifest_data.get("name")
 VERSION = manifest_data.get("version")
 ISSUEURL = manifest_data.get("issue_tracker")
 PLATFORMS = [Platform.SENSOR]
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 STARTUP = """
 -------------------------------------------------------------------
@@ -35,7 +33,7 @@ If you have any issues with this you need to open an issue here:
 )
 
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType):

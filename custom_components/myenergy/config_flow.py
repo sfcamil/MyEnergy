@@ -18,7 +18,7 @@ from homeassistant.const import (
 from . import DOMAIN, NAME
 from .utils import *
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(DOMAIN)
 
 
 
@@ -48,6 +48,7 @@ def create_schema(entry, option=False):
         default_electricity_provider = entry.data.get("electricity_provider", "No provider")
         default_gas_provider = entry.data.get("gas_provider", "No provider")
         default_add_details = entry.data.get("add_details", False)
+        default_vtest_enabled = entry.data.get("vtest_enabled", False)
     else:
         default_postalcode = ""
         default_electricity_digital_counter = False
@@ -67,6 +68,7 @@ def create_schema(entry, option=False):
         default_electricity_provider = "No provider"
         default_gas_provider = "No provider"
         default_add_details = False
+        default_vtest_enabled = False
 
     # _LOGGER.debug(f'provider_names: {provider_names}')
     data_schema = OrderedDict()
@@ -107,7 +109,7 @@ def create_schema(entry, option=False):
     ] = int
     data_schema[
         vol.Optional("inverter_power", default=default_inverter_power, description="inverter_power")
-    ] = int
+    ] = vol.Coerce(float)
     data_schema[
         vol.Required("gas_provider", default=default_gas_provider, description="gas_provider")
     ] = selector({
@@ -133,6 +135,9 @@ def create_schema(entry, option=False):
     ] = bool
     data_schema[
         vol.Required("add_details", default=default_add_details, description="add_details")
+    ] = bool
+    data_schema[
+        vol.Required("vtest_enabled", default=default_vtest_enabled, description="vtest_enabled")
     ] = bool
 
     return data_schema
@@ -205,3 +210,8 @@ class ComponentOptionsHandler(config_entries.ConfigFlow):
                 self.config_entry, data=user_input
             )
             return self.async_create_entry(title=NAME, data=user_input)
+        return self.async_show_form(
+            step_id="edit",
+            data_schema=vol.Schema(create_schema(self.config_entry, option=True)),
+            errors=self._errors,
+        )
