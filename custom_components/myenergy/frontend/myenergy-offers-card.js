@@ -4,15 +4,15 @@ const CARD_TYPE = "myenergy-offers-card";
 const TEXTS = {
   fr: { fixed: "Contrats fixes", variable: "Contrats variables", provider: "Fournisseur", product: "Produit",
         year: "€/an", own: "Votre contrat", ownBest: "Meilleure offre", savings: "Économie possible",
-        perYear: "€/an", source: "Source", updated: "mis à jour", none: "Aucune offre disponible",
+        perYear: "€/an", cheaper: "Votre contrat est déjà moins cher de", source: "Source", updated: "mis à jour", none: "Aucune offre disponible",
         notFound: "Aucun capteur MyEnergy avec des offres trouvé." },
   nl: { fixed: "Vaste contracten", variable: "Variabele contracten", provider: "Leverancier", product: "Product",
         year: "€/jaar", own: "Uw contract", ownBest: "Beste aanbod", savings: "Mogelijke besparing",
-        perYear: "€/jaar", source: "Bron", updated: "bijgewerkt", none: "Geen aanbiedingen beschikbaar",
+        perYear: "€/jaar", cheaper: "Uw contract is al goedkoper met", source: "Bron", updated: "bijgewerkt", none: "Geen aanbiedingen beschikbaar",
         notFound: "Geen MyEnergy-sensor met aanbiedingen gevonden." },
   en: { fixed: "Fixed contracts", variable: "Variable contracts", provider: "Provider", product: "Product",
         year: "€/year", own: "Your contract", ownBest: "Best offer", savings: "Possible savings",
-        perYear: "€/year", source: "Source", updated: "updated", none: "No offers available",
+        perYear: "€/year", cheaper: "Your contract is already cheaper by", source: "Source", updated: "updated", none: "No offers available",
         notFound: "No MyEnergy sensor with offers found." },
 };
 
@@ -80,12 +80,15 @@ class MyEnergyOffersCard extends HTMLElement {
         <td class="num">${this._fmt(o.price_kwh, 4)}</td>
         <td class="num">${this._fmt(o.price_year, 0)}</td>
       </tr>`).join("");
+    const savings = a["savings per year"];
     const ownLine = own ? `
       <div class="own-line">
-        <b>${esc(own.provider)} – ${esc(own.product)}</b> : ${this._fmt(own.price_kwh, 4)} €/kWh
+        ${t.own} : <b>${esc(own.provider)} – ${esc(own.product)}</b> : ${this._fmt(own.price_kwh, 4)} €/kWh
         (${this._fmt(own.price_year, 0)} ${t.perYear})
-        ${typeof a["savings per year"] === "number" && a["savings per year"] > 0
-          ? ` → ${t.savings} <b class="save">${this._fmt(a["savings per year"], 0)} ${t.perYear}</b>` : ""}
+        ${typeof savings === "number" && savings > 0
+          ? ` → ${t.savings} <b class="save">${this._fmt(savings, 0)} ${t.perYear}</b>` : ""}
+        ${typeof savings === "number" && savings < 0
+          ? ` → ${t.cheaper} <b class="save">${this._fmt(-savings, 0)} ${t.perYear}</b>` : ""}
       </div>` : "";
     return `
       <h3>${esc(title)}</h3>

@@ -16,6 +16,8 @@ The original repository (myTselection/MyEnergy) has been deleted and MijnEnergie
 ### Offers card
 The integration ships its own dashboard card, loaded automatically (no resource to add). In a dashboard: *Add card* → search **MyEnergy offers**. It shows the cheapest offers per contract type, your own contract (set *current product*, e.g. `EASY`, in the integration options) and the possible yearly savings.
 
+For an exact comparison, fill in your own contract prices in the integration options (*own price day/night/exclusive night*, *own fixed fee*, *own green cost*, all excl. VAT as printed on the annual statement). Your yearly cost is then computed with your prices plus the same network costs and taxes as the offers, instead of today's price of your product.
+
 ```yaml
 type: custom:myenergy-offers-card
 # optional:

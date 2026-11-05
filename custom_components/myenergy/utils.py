@@ -224,6 +224,11 @@ def normalize_input_config(config):
         "gas_consumption": gas_consumption,
         "gas_provider": gas_provider,
         "current_product": str(config.get("current_product", "") or "").strip(),
+        "own_price_day": _to_float(config.get("own_price_day", 0.0)),
+        "own_price_night": _to_float(config.get("own_price_night", 0.0)),
+        "own_price_excl_night": _to_float(config.get("own_price_excl_night", 0.0)),
+        "own_fixed_fee": _to_float(config.get("own_fixed_fee", 0.0)),
+        "own_green_cost": _to_float(config.get("own_green_cost", 0.0)),
         "combine_elec_and_gas": bool(config.get("combine_elec_and_gas", False)),
         "directdebit_invoice": bool(config.get("directdebit_invoice", True)),
         "email_invoice": bool(config.get("email_invoice", True)),
@@ -693,6 +698,7 @@ CWAPE_COUNTER_SINGLE_EXCL_DAY, CWAPE_COUNTER_SINGLE_EXCL_NIGHT = 6, 7
 CWAPE_COUNTER_DUAL_EXCL_DAY, CWAPE_COUNTER_DUAL_EXCL_NIGHT, CWAPE_COUNTER_DUAL_EXCL_EXCL = 9, 10, 11
 CWAPE_EXCLUDED_PROVIDERS = ("tarif social",)
 CWAPE_TOP_OFFERS = 10
+CWAPE_VAT_RATE = 0.06
 
 
 def _cwape_counter_consumptions(parsed):
@@ -746,7 +752,26 @@ def _cwape_offer_summary(entry, yearly_consumption):
     }
 
 
-def _parse_cwape_results(power_data, contract_type, section_name, current_provider=None, current_product=None):
+def _own_contract_energy_cost(parsed):
+    """Yearly energy part (incl. VAT) of the configured own contract, None when no prices are configured."""
+    if not (parsed.get("own_price_day") or parsed.get("own_price_night") or parsed.get("own_price_excl_night")):
+        return None
+    total_kwh = (
+        parsed["day_electricity_consumption"]
+        + parsed["night_electricity_consumption"]
+        + parsed["excl_night_electricity_consumption"]
+    )
+    excl_vat = (
+        parsed["own_fixed_fee"]
+        + parsed["day_electricity_consumption"] * parsed["own_price_day"]
+        + parsed["night_electricity_consumption"] * parsed["own_price_night"]
+        + parsed["excl_night_electricity_consumption"] * parsed["own_price_excl_night"]
+        + total_kwh * parsed["own_green_cost"]
+    )
+    return excl_vat * (1 + CWAPE_VAT_RATE)
+
+
+def _parse_cwape_results(power_data, contract_type, section_name, current_provider=None, current_product=None, own_energy_cost=None):
     """Pick the cheapest CWaPE offer for the requested contract type (fixed or variable)."""
     if not power_data:
         return {}
@@ -797,7 +822,19 @@ def _parse_cwape_results(power_data, contract_type, section_name, current_provid
         "offers": [_cwape_offer_summary(e, yearly_consumption) for e in candidates[:CWAPE_TOP_OFFERS]],
     }
     own = None
-    if current_provider:
+    if own_energy_cost is not None:
+        # Own contract prices configured: same network costs and taxes as the offers, own energy part.
+        own_total = own_energy_cost + best["network"]
+        json_data["current_provider_offer"] = {
+            "provider": current_provider or "",
+            "product": f"{current_product or 'My contract'} (own prices)",
+            "price_kwh": round(own_total / yearly_consumption, 4) if yearly_consumption > 0 else None,
+            "price_year": round(own_total, 2),
+            "contract_type": "own",
+            "url": "",
+        }
+        json_data["savings_per_year"] = round(own_total - best["total"], 2)
+    elif current_provider:
         same_provider = [e for e in all_entries if e["provider"].strip().lower() == current_provider.strip().lower()]
         same_provider.sort(key=lambda e: e["total"])
         if current_product:
@@ -947,7 +984,7 @@ class ComponentSession(object):
 
         result = {}
         if parsed["electricity_comp"]:
-            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL, parsed["electricity_provider"], parsed["current_product"]))
+            result.update(_parse_cwape_results(simulation.get("electricity"), contract_type, FuelType.ELECTRICITY.fullnameNL, parsed["electricity_provider"], parsed["current_product"], _own_contract_energy_cost(parsed)))
         if parsed["gas_comp"]:
             result.update(_parse_cwape_results(simulation.get("gas"), contract_type, FuelType.GAS.fullnameNL, parsed["gas_provider"]))
         return result

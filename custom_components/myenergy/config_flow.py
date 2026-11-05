@@ -48,6 +48,11 @@ def create_schema(entry, option=False):
         default_electricity_provider = entry.data.get("electricity_provider", "No provider")
         default_gas_provider = entry.data.get("gas_provider", "No provider")
         default_current_product = entry.data.get("current_product", "")
+        default_own_price_day = entry.data.get("own_price_day", 0.0)
+        default_own_price_night = entry.data.get("own_price_night", 0.0)
+        default_own_price_excl_night = entry.data.get("own_price_excl_night", 0.0)
+        default_own_fixed_fee = entry.data.get("own_fixed_fee", 0.0)
+        default_own_green_cost = entry.data.get("own_green_cost", 0.0)
         default_add_details = entry.data.get("add_details", False)
         default_vtest_enabled = entry.data.get("vtest_enabled", False)
     else:
@@ -69,6 +74,11 @@ def create_schema(entry, option=False):
         default_electricity_provider = "No provider"
         default_gas_provider = "No provider"
         default_current_product = ""
+        default_own_price_day = 0.0
+        default_own_price_night = 0.0
+        default_own_price_excl_night = 0.0
+        default_own_fixed_fee = 0.0
+        default_own_green_cost = 0.0
         default_add_details = False
         default_vtest_enabled = False
 
@@ -88,6 +98,21 @@ def create_schema(entry, option=False):
     data_schema[
         vol.Optional("current_product", default=default_current_product, description="current_product")
     ] = str
+    data_schema[
+        vol.Optional("own_price_day", default=default_own_price_day, description="own_price_day")
+    ] = vol.Coerce(float)
+    data_schema[
+        vol.Optional("own_price_night", default=default_own_price_night, description="own_price_night")
+    ] = vol.Coerce(float)
+    data_schema[
+        vol.Optional("own_price_excl_night", default=default_own_price_excl_night, description="own_price_excl_night")
+    ] = vol.Coerce(float)
+    data_schema[
+        vol.Optional("own_fixed_fee", default=default_own_fixed_fee, description="own_fixed_fee")
+    ] = vol.Coerce(float)
+    data_schema[
+        vol.Optional("own_green_cost", default=default_own_green_cost, description="own_green_cost")
+    ] = vol.Coerce(float)
     data_schema[
         vol.Required("electricity_digital_counter", default=default_electricity_digital_counter, description="electricity_digital_counter")
     ] = bool
