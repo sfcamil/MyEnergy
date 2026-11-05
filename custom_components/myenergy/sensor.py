@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 
 import requests
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.const import ATTR_ATTRIBUTION
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.util import Throttle
@@ -86,6 +86,9 @@ class CapteurOffre(SensorEntity):
     """Prix de la meilleure offre (€/kWh, TVA et frais de réseau compris) pour une énergie et un type de contrat."""
 
     _attr_native_unit_of_measurement = "€/kWh"
+    # Statistiques long terme : l'historique des prix est conservé au-delà de la purge du recorder.
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 4
 
     def __init__(self, donnees: DonneesComparaison, energie, type_contrat):
         self._donnees = donnees
