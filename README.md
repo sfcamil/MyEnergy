@@ -54,6 +54,7 @@ Toutes les valeurs se trouvent sur votre **décompte annuel** (facture de régul
 | `coût énergie (€/an)` | Partie fournisseur de la meilleure offre |
 | `coût réseau et taxes (€/an)` | Frais de réseau, taxes et redevances (identiques pour tous les fournisseurs) |
 | `prix total (€/an)` | Coût annuel total de la meilleure offre |
+| `prix énergie (€/kWh)`, `prix réseau et taxes (€/kWh)` | Les deux parts ramenées au kWh (leur somme = valeur du capteur) |
 | `consommation (kWh/an)` | Consommation utilisée pour le calcul |
 | `offres` | Les 10 meilleures offres : `fournisseur`, `produit`, `type_contrat`, `prix_kwh`, `prix_an`, `url` |
 | `votre contrat` | Votre contrat, au même format |

@@ -23,6 +23,13 @@ MIN_TIME_BETWEEN_UPDATES = timedelta(hours=1)
 NB_ESSAIS_MAX = 5
 
 
+def _par_kwh(montant, consommation):
+    """Montant annuel ramené au kWh, None si inconnu."""
+    if montant is None or not consommation:
+        return None
+    return round(montant / consommation, 4)
+
+
 async def async_setup_entry(hass, config_entry, async_add_devices):
     """Création des capteurs à partir de l'intégration configurée dans l'interface."""
     config = config_entry.data
@@ -135,6 +142,8 @@ class CapteurOffre(SensorEntity):
             "coût énergie (€/an)": r.get("cout_energie"),
             "coût réseau et taxes (€/an)": r.get("cout_reseau"),
             "prix total (€/an)": meilleure.get("prix_an"),
+            "prix énergie (€/kWh)": _par_kwh(r.get("cout_energie"), r.get("consommation")),
+            "prix réseau et taxes (€/kWh)": _par_kwh(r.get("cout_reseau"), r.get("consommation")),
             "consommation (kWh/an)": r.get("consommation"),
             "offres": r.get("offres"),
             "votre contrat": r.get("votre_contrat"),
