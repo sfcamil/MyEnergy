@@ -71,6 +71,13 @@ class CarteOffresMyEnergy extends HTMLElement {
         Votre contrat : <b>${echapper(contrat.fournisseur)} – ${echapper(contrat.produit)}</b> :
         ${this._nombre(contrat.prix_kwh, 4)} €/kWh (${this._nombre(contrat.prix_an, 0)} €/an)${comparaison}
       </div>` : "";
+    const prixEnergie = a["prix énergie (€/kWh)"];
+    const prixReseau = a["prix réseau et taxes (€/kWh)"];
+    const ligneDetail = typeof prixEnergie === "number" && typeof prixReseau === "number" ? `
+      <div class="ligne-detail">
+        Meilleure offre : énergie ${this._nombre(prixEnergie, 4)} + réseau et taxes ${this._nombre(prixReseau, 4)}
+        = ${this._nombre(prixEnergie + prixReseau, 4)} €/kWh
+      </div>` : "";
     return `
       <h3>${echapper(titre)}</h3>
       ${offres.length ? `
@@ -78,6 +85,7 @@ class CarteOffresMyEnergy extends HTMLElement {
         <thead><tr><th>#</th><th>Fournisseur</th><th>Produit</th><th class="num">€/kWh</th><th class="num">€/an</th></tr></thead>
         <tbody>${lignes}</tbody>
       </table>` : `<div class="info">Aucune offre disponible pour le moment.</div>`}
+      ${ligneDetail}
       ${ligneContrat}`;
   }
 
@@ -103,6 +111,7 @@ class CarteOffresMyEnergy extends HTMLElement {
         tr.contrat td { background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.12); }
         a { color: var(--primary-color); text-decoration: none; }
         .ligne-contrat { margin: 6px 0 4px; font-size: 0.9em; }
+        .ligne-detail { margin: 6px 0 0; font-size: 0.85em; color: var(--secondary-text-color); }
         .vert { color: var(--success-color, #43a047); }
         .info { color: var(--secondary-text-color); font-style: italic; padding: 4px 0; }
         .pied { margin-top: 8px; font-size: 0.75em; color: var(--secondary-text-color); }
